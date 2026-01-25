@@ -31,7 +31,7 @@ class AppInitService {
       if (hasPermission) {
         debugPrint('SMS permission granted, detecting expenses...');
         
-        // DEMO: Read ONLY last 5 SMS messages for speed
+        // DEMO: Read last 20 SMS messages for debugging
         final detectedTransactions = await SmsExpenseService.detectExpensesFromSms(
           limit: 5, 
         );

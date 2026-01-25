@@ -42,6 +42,8 @@ class SmsExpenseService {
     return status.isGranted;
   }
 
+
+
   /// DEMO: Read and parse SMS messages for expense detection
   /// Returns list of detected transactions
   static Future<List<Transaction>> detectExpensesFromSms({
@@ -67,57 +69,37 @@ class SmsExpenseService {
         count: limit ?? 5,
       );
 
-      debugPrint('Found ${messages.length} messages');
-
       final existingTransactions = await getStoredTransactions();
       
       // 3. Process messages
       for (var message in messages) {
         final body = message.body ?? '';
         
-        // Check if this SMS was already processed (either saved OR notified)
+        // Check if this SMS was already processed
         final processedIds = await _getProcessedReferences();
         if (processedIds.contains(message.id.toString())) {
+          debugPrint('Skipping processed msg ID: ${message.id}');
           continue;
         }
-
-        // 4. Process ONLY debit transactions (must contain "Dr.")
-        if (!body.toLowerCase().contains('dr.')) {
-          continue;
+        
+        // 4. Parse the SMS using robust logic
+        final parsedData = _parseSmsForExpense(body);
+        
+        if (parsedData == null) {
+           debugPrint('Failed to parse/ignore SMS');
+           continue;
         }
 
-        // 5. Detect UPI peer-to-peer transfers (must contain "@ok")
-        final upiPattern = RegExp(r'([a-zA-Z0-9]+)@ok[a-zA-Z]+', caseSensitive: false);
-        final match = upiPattern.firstMatch(body);
-
-        if (match != null) {
-          // 4. From the UPI ID: Extract string BEFORE '@', remove digits, capitalize
-          String rawId = match.group(1) ?? '';
-          String merchantName = rawId.replaceAll(RegExp(r'[0-9]'), ''); // Remove digits
-          if (merchantName.isNotEmpty) {
-             merchantName = merchantName[0].toUpperCase() + merchantName.substring(1).toLowerCase();
-          } else {
-            merchantName = 'Unknown';
-          }
-
-          // Extract amount
-          double amount = 0.0;
-          final amountPattern = RegExp(r'(?:rs\.?|inr|₹)\s*(\d+(?:\.\d{2})?)', caseSensitive: false);
-          final amountMatch = amountPattern.firstMatch(body);
-          if (amountMatch != null) {
-            amount = double.tryParse(amountMatch.group(1) ?? '0') ?? 0.0;
-          }
-
-          // Extract Reference
-          String? refNumber;
-          final refPattern = RegExp(r'(?:Ref:|Reference:|txn)\s*(\d+)', caseSensitive: false);
-          final refMatch = refPattern.firstMatch(body);
-          if (refMatch != null) {
-            refNumber = refMatch.group(1);
-          }
+        debugPrint('Parsed data: $parsedData');
+        
+        if (parsedData != null) {
+          double amount = parsedData['amount'];
+          String merchantName = parsedData['merchant'];
+          String? refNumber = parsedData['reference'];
+          String paymentMethod = parsedData['paymentMethod'];
 
           // LOW CONFIDENCE / UNKNOWN MERCHANT CHECK
-          if (merchantName == 'Unknown' || merchantName.isEmpty) {
+          if (merchantName == 'Unknown Merchant' || merchantName.isEmpty) {
              debugPrint('Low confidence transaction detected. Triggering notification.');
              await NotificationService.showExpenseNotification(
                amount: amount,
@@ -131,7 +113,11 @@ class SmsExpenseService {
           // 6. Check for duplicates (Prevent duplicates in storage)
           final isDuplicate = existingTransactions.any((tx) {
              if (refNumber != null && tx.referenceNumber == refNumber) return true;
-             return tx.amount == amount && tx.merchant == merchantName; 
+             // Fuzzy match: same amount, same merchant, same day
+             final sameDay = tx.date.year == (message.date?.year ?? 0) &&
+                             tx.date.month == (message.date?.month ?? 0) &&
+                             tx.date.day == (message.date?.day ?? 0);
+             return tx.amount == amount && tx.merchant == merchantName && sameDay; 
           });
 
           if (isDuplicate) {
@@ -145,8 +131,8 @@ class SmsExpenseService {
             id: _generateTransactionId(),
             amount: amount,
             merchant: merchantName,
-            category: 'Transfers',
-            paymentMethod: 'UPI',
+            category: _categorizeExpense(merchantName, amount)['category'],
+            paymentMethod: paymentMethod,
             isAutoDetected: true,
             date: message.date ?? DateTime.now(),
             referenceNumber: refNumber,
@@ -155,7 +141,7 @@ class SmsExpenseService {
 
           debugPrint('Auto-detected transaction: ${transaction.merchant} - ${transaction.amount}');
 
-          // 6. Save ONLY ONE auto-detected transaction
+          // 6. Save ONLY ONE auto-detected transaction (per run cycle, typically)
           await saveTransactions([transaction]);
           await _markSmsAsProcessed(message.id.toString());
           
@@ -213,9 +199,9 @@ class SmsExpenseService {
       }
     }
 
-    // Pattern 3: "Paid Rs.299" or "spent 299"
+    // Pattern 3: "Paid Rs.299" or "spent 299" or "Sent 299"
     if (amount == null) {
-      final pattern3 = RegExp(r'(?:paid|spent)\s*(?:rs\.?|inr|₹)?\s*(\d+(?:\.\d{2})?)', caseSensitive: false);
+      final pattern3 = RegExp(r'(?:paid|spent|sent|transferred)\s*(?:rs\.?|inr|₹)?\s*(\d+(?:\.\d{2})?)', caseSensitive: false);
       final match3 = pattern3.firstMatch(body);
       if (match3 != null) {
         amountStr = match3.group(1);
@@ -523,3 +509,8 @@ class SmsExpenseService {
   }
 }
 
+
+/// Helper to take first N chars safely
+extension StringExtension on String {
+  String take(int n) => length > n ? substring(0, n) : this;
+}

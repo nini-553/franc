@@ -218,7 +218,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       CupertinoPageRoute(
                         builder: (context) => const AddExpenseScreen(),
                       ),
-                    );
+                    ).then((_) => _loadTransactions());
                   },
                   child: Container(
                     width: double.infinity,

@@ -3,6 +3,10 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/constants.dart';
 import '../../widgets/category_chip.dart';
+import '../../models/transaction_model.dart';
+import '../../services/transaction_storage_service.dart';
+import '../../navigation/bottom_nav.dart';
+import 'dart:math';
 
 class ReviewReceiptScreen extends StatefulWidget {
   const ReviewReceiptScreen({super.key});
@@ -26,24 +30,59 @@ class _ReviewReceiptScreenState extends State<ReviewReceiptScreen> {
     super.dispose();
   }
 
-  void _saveExpense() {
+  void _saveExpense() async {
+    // Basic Validation
+    if (_amountController.text.isEmpty) {
+       // Ideally show alert, but for now just return or handle safely
+       return; 
+    }
+
+    final amountVal = double.tryParse(_amountController.text) ?? 0.0;
+
+    // Create transaction object
+    final newTransaction = Transaction(
+      id: _generateId(),
+      amount: amountVal,
+      merchant: _merchantController.text.isEmpty ? 'Unknown Receipt' : _merchantController.text,
+      category: _selectedCategory,
+      date: _selectedDate,
+      paymentMethod: _selectedPaymentMethod,
+      isAutoDetected: false, 
+      // In a real app, you'd save the receipt image path here too
+    );
+
+    // Save to storage
+    await TransactionStorageService.addTransaction(newTransaction);
+
+    if (!mounted) return;
+
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
         title: const Text('Success'),
-        content: const Text('Expense added successfully!'),
+        content: const Text('Receipt expense saved!'),
         actions: [
           CupertinoDialogAction(
             onPressed: () {
-              Navigator.of(context).pop(); // Close dialog
-              Navigator.of(context).pop(); // Go back to add expense
-              Navigator.of(context).pop(); // Go back to home
+              // CRITICAL FIX: Safe reset to Home
+              Navigator.of(context).pushAndRemoveUntil(
+                CupertinoPageRoute(
+                  builder: (context) => const BottomNavigation(),
+                ),
+                (route) => false,
+              );
             },
             child: const Text('OK'),
           ),
         ],
       ),
     );
+  }
+
+  String _generateId() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final random = Random().nextInt(10000);
+    return 'receipt_${now}_$random';
   }
 
   @override

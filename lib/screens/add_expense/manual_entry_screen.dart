@@ -4,6 +4,10 @@ import '../../theme/app_text_styles.dart';
 import '../../utils/constants.dart';
 import '../../widgets/keypad.dart';
 import '../../widgets/category_chip.dart';
+import '../../models/transaction_model.dart';
+import '../../services/transaction_storage_service.dart';
+import '../../navigation/bottom_nav.dart';
+import 'dart:math';
 
 class ManualEntryScreen extends StatefulWidget {
   final double? initialAmount;
@@ -78,7 +82,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
     });
   }
 
-  void _saveExpense() {
+  void _saveExpense() async {
     if (_amount == '0' || _amount.isEmpty) {
       _showAlert('Please enter an amount');
       return;
@@ -89,7 +93,25 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
       return;
     }
 
-    // Show success and navigate back
+    // Create transaction object
+    final newTransaction = Transaction(
+      id: _generateId(),
+      amount: double.parse(_amount),
+      merchant: _merchant,
+      category: _selectedCategory,
+      date: _selectedDate,
+      paymentMethod: _selectedPaymentMethod,
+      isAutoDetected: false,
+    );
+
+    // Save to storage
+    await TransactionStorageService.addTransaction(newTransaction);
+
+    if (!mounted) return;
+
+    // Show success and navigate back safely utilizing a hard reset to avoid stack errors
+    if (!mounted) return;
+
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
@@ -98,15 +120,27 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
         actions: [
           CupertinoDialogAction(
             onPressed: () {
-              Navigator.of(context).pop(); // Close dialog
-              Navigator.of(context).pop(); // Go back to add expense
-              Navigator.of(context).pop(); // Go back to home
+              // CRITICAL FIX: Use pushAndRemoveUntil to safely reset to Home.
+              // This avoids the "!_debugLocked" crash caused by multiple pops
+              // and ensures the Home screen reloads the new transaction.
+              Navigator.of(context).pushAndRemoveUntil(
+                CupertinoPageRoute(
+                  builder: (context) => const BottomNavigation(),
+                ),
+                (route) => false,
+              );
             },
             child: const Text('OK'),
           ),
         ],
       ),
     );
+  }
+
+  String _generateId() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final random = Random().nextInt(10000);
+    return 'manual_${now}_$random';
   }
 
   void _showAlert(String message) {
