@@ -3,8 +3,9 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/constants.dart';
 import '../../services/auth_service.dart';
-import 'login_screen.dart';
+import '../../services/profile_service.dart';
 import '../../navigation/bottom_nav.dart';
+import 'login_screen.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -14,6 +15,7 @@ class SignUpScreen extends StatefulWidget {
 }
 
 class _SignUpScreenState extends State<SignUpScreen> {
+  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _collegeController = TextEditingController();
@@ -23,6 +25,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   @override
   void dispose() {
+    _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _collegeController.dispose();
@@ -33,7 +36,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   void _handleSignUp() async {
     // Simple validation
-    if (_emailController.text.isEmpty ||
+    if (_nameController.text.isEmpty ||
+        _emailController.text.isEmpty ||
         _passwordController.text.isEmpty ||
         _collegeController.text.isEmpty ||
         _cityController.text.isEmpty ||
@@ -64,9 +68,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
         state: _stateController.text,
       );
 
-      // Save user_id locally
-      if (result['user_id'] != null) {
-        await AuthService.saveUserId(result['user_id']);
+      // Save user_id and email locally
+      if (result['user_id'] != null && result['email'] != null) {
+        await AuthService.saveUserData(result['user_id'], result['email']);
+        
+        // Save Profile Name
+         // Save Profile Name
+        await ProfileService.saveProfile(
+          name: _nameController.text,
+          email: result['email'],
+        );
       }
 
       // Close loading dialog
@@ -151,6 +162,26 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 40),
+               // Name field
+              Text(
+                'Full Name',
+                style: AppTextStyles.body.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              CupertinoTextField(
+                controller: _nameController,
+                placeholder: 'Enter your full name',
+                textCapitalization: TextCapitalization.words,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: CupertinoColors.white,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                style: AppTextStyles.body,
+              ),
+              const SizedBox(height: 20),
               // Email field
               Text(
                 'Email',

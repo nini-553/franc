@@ -84,10 +84,11 @@ class AuthService {
     }
   }
 
-  /// Save user ID locally
-  static Future<void> saveUserId(int userId) async {
+  /// Save user data locally
+  static Future<void> saveUserData(int userId, String email) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('user_id', userId);
+    await prefs.setString('user_email', email);
   }
 
   /// Get saved user ID
@@ -96,10 +97,17 @@ class AuthService {
     return prefs.getInt('user_id');
   }
 
+  /// Get saved user email
+  static Future<String?> getUserEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('user_email');
+  }
+
   /// Logout user
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('user_id');
+    await prefs.remove('user_email');
   }
 }
 

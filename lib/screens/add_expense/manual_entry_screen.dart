@@ -200,7 +200,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                             'Amount',
                             style: AppTextStyles.cardBody.copyWith(
                               fontSize: 14,
-                              color: AppColors.textOnCard.withOpacity(0.7),
+                              color: AppColors.textOnCard.withValues(alpha: 0.7),
                             ),
                           ),
                           const SizedBox(height: 8),

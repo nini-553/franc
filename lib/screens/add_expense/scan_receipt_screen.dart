@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import 'review_receipt_screen.dart';
@@ -12,27 +13,38 @@ class ScanReceiptScreen extends StatefulWidget {
 
 class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
   bool _isScanning = false;
+  final ImagePicker _picker = ImagePicker();
 
-  void _startScanning() {
+  Future<void> _startScanning() async {
     setState(() {
       _isScanning = true;
     });
 
-    // Simulate scanning process
-    Future.delayed(const Duration(seconds: 2), () {
+    try {
+      final XFile? photo = await _picker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+      );
+
+      if (photo != null) {
+        if (!mounted) return;
+        
+        // Navigate to review screen with image path
+        Navigator.of(context).pushReplacement(
+          CupertinoPageRoute(
+            builder: (context) => ReviewReceiptScreen(imagePath: photo.path),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error scanning receipt: $e');
+    } finally {
       if (mounted) {
         setState(() {
           _isScanning = false;
         });
-
-        // Navigate to review screen
-        Navigator.of(context).pushReplacement(
-          CupertinoPageRoute(
-            builder: (context) => const ReviewReceiptScreen(),
-          ),
-        );
       }
-    });
+    }
   }
 
   @override
@@ -41,7 +53,8 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
       backgroundColor: AppColors.textPrimary,
       child: Stack(
         children: [
-          // Camera viewfinder simulation
+          // Camera viewfinder simulation (since we can't embed real camera preview easily without camera package logic in build)
+          // We will use a placeholder or black background until user taps 'scan' which opens system camera
           Container(
             color: AppColors.textPrimary,
             child: Center(
@@ -49,7 +62,7 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   if (!_isScanning) ...[
-                    // Scan guide overlay
+                     // Scan guide overlay
                     Container(
                       width: 300,
                       height: 400,
@@ -71,14 +84,8 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
                               height: 40,
                               decoration: const BoxDecoration(
                                 border: Border(
-                                  top: BorderSide(
-                                    color: AppColors.primary,
-                                    width: 4,
-                                  ),
-                                  left: BorderSide(
-                                    color: AppColors.primary,
-                                    width: 4,
-                                  ),
+                                  top: BorderSide(color: AppColors.primary, width: 4),
+                                  left: BorderSide(color: AppColors.primary, width: 4),
                                 ),
                               ),
                             ),
@@ -91,14 +98,8 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
                               height: 40,
                               decoration: const BoxDecoration(
                                 border: Border(
-                                  top: BorderSide(
-                                    color: AppColors.primary,
-                                    width: 4,
-                                  ),
-                                  right: BorderSide(
-                                    color: AppColors.primary,
-                                    width: 4,
-                                  ),
+                                  top: BorderSide(color: AppColors.primary, width: 4),
+                                  right: BorderSide(color: AppColors.primary, width: 4),
                                 ),
                               ),
                             ),
@@ -111,14 +112,8 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
                               height: 40,
                               decoration: const BoxDecoration(
                                 border: Border(
-                                  bottom: BorderSide(
-                                    color: AppColors.primary,
-                                    width: 4,
-                                  ),
-                                  left: BorderSide(
-                                    color: AppColors.primary,
-                                    width: 4,
-                                  ),
+                                  bottom: BorderSide(color: AppColors.primary, width: 4),
+                                  left: BorderSide(color: AppColors.primary, width: 4),
                                 ),
                               ),
                             ),
@@ -131,14 +126,8 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
                               height: 40,
                               decoration: const BoxDecoration(
                                 border: Border(
-                                  bottom: BorderSide(
-                                    color: AppColors.primary,
-                                    width: 4,
-                                  ),
-                                  right: BorderSide(
-                                    color: AppColors.primary,
-                                    width: 4,
-                                  ),
+                                  bottom: BorderSide(color: AppColors.primary, width: 4),
+                                  right: BorderSide(color: AppColors.primary, width: 4),
                                 ),
                               ),
                             ),
@@ -148,7 +137,7 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
                     ),
                     const SizedBox(height: 32),
                     Text(
-                      'Position receipt within frame',
+                      'Tap circle below to open camera',
                       style: AppTextStyles.body.copyWith(
                         color: AppColors.textOnCard,
                       ),
@@ -161,7 +150,7 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
                     ),
                     const SizedBox(height: 24),
                     Text(
-                      'Scanning receipt...',
+                      'Opening camera...',
                       style: AppTextStyles.h3.copyWith(
                         color: AppColors.textOnCard,
                       ),
@@ -185,7 +174,7 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        color: AppColors.textPrimary.withOpacity(0.5),
+                        color: AppColors.textPrimary.withValues(alpha: 0.5),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -195,11 +184,12 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
                       ),
                     ),
                   ),
-                  Container(
+                   // Flash icon placeholder - functional in system camera
+                   Container(
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: AppColors.textPrimary.withOpacity(0.5),
+                      color: AppColors.textPrimary.withValues(alpha: 0.5),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -240,6 +230,11 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
                           color: CupertinoColors.white,
                           shape: BoxShape.circle,
                         ),
+                        child: const Icon(
+                          CupertinoIcons.camera_fill,
+                          color: AppColors.textPrimary,
+                          size: 32,
+                        ),
                       ),
                     ),
                   ),
@@ -261,11 +256,11 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
                       vertical: 12,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.textPrimary.withOpacity(0.7),
+                      color: AppColors.textPrimary.withValues(alpha: 0.7),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      'Make sure receipt is clearly visible',
+                      'Scan physical receipts',
                       style: AppTextStyles.caption.copyWith(
                         color: CupertinoColors.white,
                       ),

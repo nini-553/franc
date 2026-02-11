@@ -10,7 +10,7 @@ class UndiyalApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return CupertinoApp(
       title: 'Undiyal',
-      theme: CupertinoThemeData(
+      theme: const CupertinoThemeData(
         primaryColor: AppColors.primary,
         scaffoldBackgroundColor: AppColors.background,
         barBackgroundColor: AppColors.background,

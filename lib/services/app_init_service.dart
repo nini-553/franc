@@ -7,7 +7,7 @@ import 'transaction_storage_service.dart';
 
 /// Service to initialize app and read SMS on launch
 class AppInitService {
-  /// Initialize app: Request SMS permission and detect expenses
+  /// Initialize app: Setup services without requesting permissions
   static Future<void> initialize() async {
     try {
       // PERFROM ONE-TIME CLEANUP (Migration to real data only)
@@ -21,23 +21,30 @@ class AppInitService {
         debugPrint('One-time cleanup complete.');
       }
 
-      // Initialize Notifications
+      // Initialize Notifications (without requesting permission)
       await NotificationService.initialize();
-      await NotificationService.requestPermission();
+      debugPrint('Notification service initialized');
+    } catch (e) {
+      debugPrint('Error initializing app services: $e');
+    }
+  }
 
-      // Request SMS permission
-      final hasPermission = await SmsExpenseService.requestSmsPermission();
+  /// Initialize SMS detection after permissions are granted
+  static Future<void> initializeSmsDetection() async {
+    try {
+      // Check if SMS permission is granted
+      final hasPermission = await SmsExpenseService.hasSmsPermission();
       
       if (hasPermission) {
         debugPrint('SMS permission granted, detecting expenses...');
         
-        // DEMO: Read last 20 SMS messages for debugging
+        // Read last 50 SMS messages for initial detection
         final detectedTransactions = await SmsExpenseService.detectExpensesFromSms(
-          limit: 5, 
+          limit: 50, 
         );
 
         if (detectedTransactions.isNotEmpty) {
-          debugPrint('Detected & Saved DEMO transaction from SMS');
+          debugPrint('Detected & Saved transaction from SMS');
         }
       } else {
         debugPrint('SMS permission not granted');

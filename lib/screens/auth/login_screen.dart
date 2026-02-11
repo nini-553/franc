@@ -51,9 +51,9 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text,
       );
 
-      // Save user_id locally
-      if (response['user_id'] != null) {
-        await AuthService.saveUserId(response['user_id']);
+      // Save user_id and email locally
+      if (response['user_id'] != null && response['email'] != null) {
+        await AuthService.saveUserData(response['user_id'], response['email']);
       }
 
       // Close loading dialog

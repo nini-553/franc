@@ -51,7 +51,7 @@ class NotificationService {
   }
 
   static Future<void> _createNotificationChannel() async {
-    final AndroidNotificationChannel channel = const AndroidNotificationChannel(
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
       _channelId,
       _channelName,
       description: _channelDesc,
@@ -65,11 +65,19 @@ class NotificationService {
   }
 
   /// Request notification permission (Android 13+)
-  static Future<void> requestPermission() async {
+  static Future<bool> requestPermission() async {
     final status = await Permission.notification.status;
-    if (status.isDenied) {
-      await Permission.notification.request();
+    if (status.isGranted) {
+      return true;
     }
+
+    if (status.isPermanentlyDenied) {
+      debugPrint('Notification permission permanently denied.');
+      return false;
+    }
+
+    final result = await Permission.notification.request();
+    return result.isGranted;
   }
 
   /// Show a friendly notification for an undetected expense

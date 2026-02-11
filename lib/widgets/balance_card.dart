@@ -29,7 +29,7 @@ class BalanceCard extends StatelessWidget {
             'Wallet Balance',
             style: AppTextStyles.cardBody.copyWith(
               fontSize: 14,
-              color: AppColors.textOnCard.withOpacity(0.7),
+              color: AppColors.textOnCard.withValues(alpha: 0.7),
             ),
           ),
           const SizedBox(height: 8),
@@ -46,7 +46,7 @@ class BalanceCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.2),
+                  color: AppColors.primary.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
@@ -55,7 +55,7 @@ class BalanceCard extends StatelessWidget {
                     Text(
                       'This week: ',
                       style: AppTextStyles.caption.copyWith(
-                        color: AppColors.textOnCard.withOpacity(0.7),
+                        color: AppColors.textOnCard.withValues(alpha: 0.7),
                       ),
                     ),
                     Text(

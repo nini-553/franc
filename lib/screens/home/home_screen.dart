@@ -99,24 +99,64 @@ class _HomeScreenState extends State<HomeScreen> {
                         Text('Welcome back!', style: AppTextStyles.h2),
                       ],
                     ),
-                    GestureDetector(
-                      onTap: () {
-                        // Navigate to notifications
-                      },
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: CupertinoColors.white,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          CupertinoIcons.bell,
-                          color: AppColors.textPrimary,
-                          size: 22,
-                        ),
+                      Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () async {
+                              setState(() => _isLoading = true);
+                              await _runBackgroundSmsScan();
+                              if (mounted) {
+                                  setState(() => _isLoading = false);
+                                  showCupertinoDialog(
+                                    context: context,
+                                    builder: (context) => CupertinoAlertDialog(
+                                      title: const Text('Sync Complete'),
+                                      content: const Text('Scanned last 50 SMS messages for expenses.'),
+                                      actions: [
+                                        CupertinoDialogAction(
+                                          child: const Text('OK'),
+                                          onPressed: () => Navigator.pop(context),
+                                        )
+                                      ],
+                                    ),
+                                  );
+                              }
+                            },
+                            child: Container(
+                              width: 44,
+                              height: 44,
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                color: CupertinoColors.white,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(
+                                CupertinoIcons.arrow_2_circlepath,
+                                color: AppColors.textPrimary,
+                                size: 22,
+                              ),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              // Navigate to notifications
+                            },
+                            child: Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: CupertinoColors.white,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(
+                                CupertinoIcons.bell,
+                                color: AppColors.textPrimary,
+                                size: 22,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -141,7 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     Text('This Week', style: AppTextStyles.h3),
                     const SizedBox(height: 16),
-                    const WeeklyExpenseChart(),
+                    WeeklyExpenseChart(transactions: _transactions),
                   ],
                 ),
               ),

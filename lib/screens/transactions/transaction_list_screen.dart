@@ -202,7 +202,7 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
                           'Total Transactions',
                           style: AppTextStyles.cardBody.copyWith(
                             fontSize: 14,
-                            color: AppColors.textOnCard.withOpacity(0.7),
+                            color: AppColors.textOnCard.withValues(alpha: 0.7),
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -221,7 +221,7 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
                           'Total Amount',
                           style: AppTextStyles.cardBody.copyWith(
                             fontSize: 14,
-                            color: AppColors.textOnCard.withOpacity(0.7),
+                            color: AppColors.textOnCard.withValues(alpha: 0.7),
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -383,7 +383,7 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
             width: 100,
             height: 100,
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.2),
+              color: AppColors.primary.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
             child: const Icon(

@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/cupertino.dart';
+
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/constants.dart';
@@ -9,7 +11,8 @@ import '../../navigation/bottom_nav.dart';
 import 'dart:math';
 
 class ReviewReceiptScreen extends StatefulWidget {
-  const ReviewReceiptScreen({super.key});
+  final String? imagePath;
+  const ReviewReceiptScreen({super.key, this.imagePath});
 
   @override
   State<ReviewReceiptScreen> createState() => _ReviewReceiptScreenState();
@@ -22,6 +25,30 @@ class _ReviewReceiptScreenState extends State<ReviewReceiptScreen> {
   String _selectedCategory = 'Others';
   String _selectedPaymentMethod = 'Cash';
   DateTime _selectedDate = DateTime.now();
+  
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.imagePath != null) {
+      _processReceipt(widget.imagePath!);
+    }
+  }
+
+  Future<void> _processReceipt(String path) async {
+    // API REMOVED: Integration with Gemini has been removed.
+    // Users will now manually enter details from the image.
+    // Future integration with local OCR planned.
+    
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+        // Pre-fill date to today
+        _selectedDate = DateTime.now();
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -107,7 +134,18 @@ class _ReviewReceiptScreenState extends State<ReviewReceiptScreen> {
         ),
       ),
       child: SafeArea(
-        child: Column(
+        child: _isLoading 
+        ? Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CupertinoActivityIndicator(radius: 20),
+                const SizedBox(height: 16),
+                Text('Analyzing Receipt...', style: AppTextStyles.body),
+              ],
+            ),
+          )
+        : Column(
           children: [
             Expanded(
               child: SingleChildScrollView(
@@ -117,11 +155,12 @@ class _ReviewReceiptScreenState extends State<ReviewReceiptScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Success message
+                    if (widget.imagePath != null)
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: AppColors.success.withOpacity(0.2),
+                        color: AppColors.success.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Row(
@@ -134,7 +173,7 @@ class _ReviewReceiptScreenState extends State<ReviewReceiptScreen> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              'Receipt scanned successfully',
+                              'Receipt analyzed successfully',
                               style: AppTextStyles.body.copyWith(
                                 color: AppColors.success,
                                 fontWeight: FontWeight.w600,
@@ -154,8 +193,14 @@ class _ReviewReceiptScreenState extends State<ReviewReceiptScreen> {
                       decoration: BoxDecoration(
                         color: CupertinoColors.systemGrey5,
                         borderRadius: BorderRadius.circular(16),
+                        image: widget.imagePath != null 
+                          ? DecorationImage(
+                              image: FileImage(File(widget.imagePath!)),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
                       ),
-                      child: Center(
+                      child: widget.imagePath == null ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -166,12 +211,12 @@ class _ReviewReceiptScreenState extends State<ReviewReceiptScreen> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Receipt Preview',
+                              'No Receipt Image',
                               style: AppTextStyles.caption,
                             ),
                           ],
                         ),
-                      ),
+                      ) : null,
                     ),
 
                     const SizedBox(height: 24),
@@ -190,7 +235,7 @@ class _ReviewReceiptScreenState extends State<ReviewReceiptScreen> {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.3),
+                            color: AppColors.primary.withValues(alpha: 0.3),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(

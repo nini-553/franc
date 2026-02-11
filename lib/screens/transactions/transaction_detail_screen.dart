@@ -81,7 +81,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                         width: 80,
                         height: 80,
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.3),
+                          color: AppColors.primary.withValues(alpha: 0.3),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -105,7 +105,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                           Text(
                             _currentCategory,
                             style: AppTextStyles.body.copyWith(
-                              color: AppColors.textOnCard.withOpacity(0.7),
+                              color: AppColors.textOnCard.withValues(alpha: 0.7),
                             ),
                           ),
                           if (widget.transaction.isAutoDetected) ...[
@@ -113,7 +113,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: AppColors.primary.withOpacity(0.3),
+                                color: AppColors.primary.withValues(alpha: 0.3),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
@@ -133,7 +133,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                         Text(
                           'Confidence: ${(widget.transaction.confidenceScore! * 100).toStringAsFixed(0)}%',
                           style: AppTextStyles.caption.copyWith(
-                            color: AppColors.textOnCard.withOpacity(0.6),
+                            color: AppColors.textOnCard.withValues(alpha: 0.6),
                             fontSize: 12,
                           ),
                         ),
@@ -348,7 +348,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                         height: 48,
                         decoration: BoxDecoration(
                           color: _isRecurring
-                              ? AppColors.primary.withOpacity(0.3)
+                              ? AppColors.primary.withValues(alpha: 0.3)
                               : CupertinoColors.systemGrey6,
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -435,7 +435,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: CupertinoButton(
-                        color: AppColors.error.withOpacity(0.1),
+                        color: AppColors.error.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(16),
                         onPressed: () => _deleteTransaction(context),
                         child: Row(
@@ -571,28 +571,28 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     showCupertinoModalPopup(
       context: context,
       builder: (BuildContext context) => CupertinoActionSheet(
-        title: Text('Transaction Options'),
+        title: const Text('Transaction Options'),
         actions: [
           CupertinoActionSheetAction(
             onPressed: () {
               Navigator.of(context).pop();
               _editTransaction(context);
             },
-            child: Text('Edit Transaction'),
+            child: const Text('Edit Transaction'),
           ),
           CupertinoActionSheetAction(
             onPressed: () {
               Navigator.of(context).pop();
               _shareTransaction(context);
             },
-            child: Text('Share Transaction'),
+            child: const Text('Share Transaction'),
           ),
           CupertinoActionSheetAction(
             onPressed: () {
               Navigator.of(context).pop();
               _viewReceipt(context);
             },
-            child: Text('View Receipt'),
+            child: const Text('View Receipt'),
           ),
           CupertinoActionSheetAction(
             isDestructiveAction: true,
@@ -617,12 +617,12 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
-        title: Text('Edit Transaction'),
-        content: Text('Transaction editing feature coming soon!'),
+        title: const Text('Edit Transaction'),
+        content: const Text('Transaction editing feature coming soon!'),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text('OK'),
+            child: const Text('OK'),
           ),
         ],
       ),
@@ -633,13 +633,13 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
-        title: Text('Delete Transaction'),
-        content: Text(
+        title: const Text('Delete Transaction'),
+        content: const Text(
             'Are you sure you want to delete this transaction? This action cannot be undone.'),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text('Cancel'),
+            child: const Text('Cancel'),
           ),
           CupertinoDialogAction(
             isDestructiveAction: true,
@@ -647,7 +647,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
               Navigator.of(context).pop(); // Close dialog
               Navigator.of(context).pop(); // Go back to list
             },
-            child: Text('Delete'),
+            child: const Text('Delete'),
           ),
         ],
       ),
@@ -658,14 +658,14 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
-        title: Text('Share Transaction'),
+        title: const Text('Share Transaction'),
         content: Text(
           'Share: ${widget.transaction.merchant} - ₹${widget.transaction.amount.toStringAsFixed(2)}',
         ),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text('OK'),
+            child: const Text('OK'),
           ),
         ],
       ),

@@ -18,7 +18,7 @@ class _BottomNavigationState extends State<BottomNavigation> {
     const HomeScreen(),
     const AnalyticsScreen(),
     const AddExpenseScreen(),
-    TransactionListScreen(),
+    const TransactionListScreen(),
     const ProfileScreen(),
   ];
 

@@ -1,25 +1,53 @@
 import '../models/transaction_model.dart';
 import 'sms_expense_service.dart';
+import 'expense_service.dart';
 
 /// Service to manage stored transactions
 /// Provides unified access to transactions across the app
 class TransactionStorageService {
   /// Get all transactions
   static Future<List<Transaction>> getAllTransactions() async {
-    // Get stored transactions (SMS + Manual)
-    final storedTransactions = await SmsExpenseService.getStoredTransactions();
+    // 1. Get stored transactions (SMS + Manual Local)
+    var allTransactions = await SmsExpenseService.getStoredTransactions();
+    
+    // 2. Fetch from Backend
+    try {
+      final remoteTransactions = await ExpenseService.getExpenses();
+      if (remoteTransactions.isNotEmpty) {
+        // Merge strategy: Remote overwrites local if ID matches
+        final Map<String, Transaction> mergedMap = {};
+        for (var tx in allTransactions) {
+          mergedMap[tx.id] = tx;
+        }
+        for (var tx in remoteTransactions) {
+          mergedMap[tx.id] = tx;
+        }
+        allTransactions = mergedMap.values.toList();
+        
+        // Update local storage with latest merged data
+        // This ensures offline access has latest data next time
+        await SmsExpenseService.saveTransactions(allTransactions);
+      }
+    } catch (e) {
+      // Ignore network errors, show local data
+      print('Error syncing transactions: $e');
+    }
     
     // Sort by date (newest first)
-    storedTransactions.sort((a, b) => b.date.compareTo(a.date));
+    allTransactions.sort((a, b) => b.date.compareTo(a.date));
     
-    return storedTransactions;
+    return allTransactions;
   }
 
   /// Add a new transaction (manual entry)
   static Future<void> addTransaction(Transaction transaction) async {
+    // 1. Save locally first (Optimistic UI)
     final existingTransactions = await SmsExpenseService.getStoredTransactions();
     existingTransactions.add(transaction);
     await SmsExpenseService.saveTransactions(existingTransactions);
+
+    // 2. Sync to backend
+    await ExpenseService.addExpense(transaction);
   }
 
   /// Update transaction category (for manual editing)

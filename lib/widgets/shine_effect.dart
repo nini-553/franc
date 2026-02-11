@@ -54,7 +54,7 @@ class _ShineEffectState extends State<ShineEffect> with SingleTickerProviderStat
               colors: [
                 CupertinoColors.transparent,
                 CupertinoColors.transparent,
-                CupertinoColors.white.withOpacity(0.3),
+                CupertinoColors.white.withValues(alpha: 0.3),
                 CupertinoColors.transparent,
                 CupertinoColors.transparent,
               ],

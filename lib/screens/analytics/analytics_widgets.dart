@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'dart:math';
 import 'package:flutter/cupertino.dart';
@@ -7,7 +8,69 @@ import '../../widgets/glass_card.dart';
 import '../../widgets/shine_effect.dart';
 import '../../widgets/animated_counter.dart';
 
-// --- Budget Ring Card ---
+// --- Insight Card (NEW) ---
+class InsightCard extends StatelessWidget {
+  final String text;
+  final int index;
+
+  const InsightCard({super.key, required this.text, required this.index});
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: Duration(milliseconds: 600 + (index * 200)),
+      curve: Curves.easeOutBack,
+      builder: (context, value, child) {
+        return Transform.translate(
+          offset: Offset(0, 20 * (1 - value)),
+          child: Opacity(
+            opacity: value,
+            child: child,
+          ),
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: CupertinoColors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.1)),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(CupertinoIcons.lightbulb_fill, color: AppColors.primary, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                text,
+                style: AppTextStyles.body.copyWith(fontSize: 14),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// --- Budget Ring Card (Refined) ---
 class BudgetRingCard extends StatelessWidget {
   final double spent;
   final double budget;
@@ -20,8 +83,9 @@ class BudgetRingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (budget == 0) return const SizedBox.shrink(); // Prevent division by zero
+    
     final progress = (spent / budget).clamp(0.0, 1.0);
-    final percentage = (progress * 100).toInt();
 
     String emoji;
     if (progress < 0.5) {
@@ -34,7 +98,7 @@ class BudgetRingCard extends StatelessWidget {
 
     return ShineEffect(
       child: GlassCard(
-        color: AppColors.primary.withOpacity(0.05), // Very subtle tint
+        color: AppColors.primary.withValues(alpha: 0.05),
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
@@ -63,21 +127,21 @@ class BudgetRingCard extends StatelessWidget {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      // Background Circle
-                      CircularProgressIndicator(
+                      // Background
+                      const CircularProgressIndicator(
                         value: 1.0,
                         color: AppColors.border,
                         strokeWidth: 10,
                       ),
-                      // Progress Circle
+                      // Progress
                       TweenAnimationBuilder<double>(
                         tween: Tween<double>(begin: 0, end: progress),
                         duration: const Duration(seconds: 2),
                         curve: Curves.easeOutExpo,
                         builder: (context, value, _) {
-                          Color color = AppColors.success;
-                          if (value > 0.5) color = AppColors.warning;
-                          if (value > 0.8) color = AppColors.error;
+                          Color color = const Color(0xFF34D399); // Mint Green
+                          if (value > 0.6) color = const Color(0xFFFBBF24); // Amber
+                          if (value > 0.9) color = const Color(0xFFF87171); // Red
                           
                           return CircularProgressIndicator(
                             value: value,
@@ -87,7 +151,6 @@ class BudgetRingCard extends StatelessWidget {
                           );
                         },
                       ),
-                      // Emoji Center
                       Center(
                         child: Text(
                           emoji,
@@ -106,15 +169,13 @@ class BudgetRingCard extends StatelessWidget {
   }
 }
 
-// --- Spending Trend Chart (Upgraded) ---
+// --- Spending Trend Chart (Refined) ---
 class SpendingTrendChart extends StatelessWidget {
   final List<Map<String, dynamic>> data;
-  final bool animate;
 
   const SpendingTrendChart({
     super.key,
     required this.data,
-    this.animate = true,
   });
 
   @override
@@ -131,7 +192,7 @@ class SpendingTrendChart extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: AppColors.textPrimary.withOpacity(0.05),
+            color: AppColors.textPrimary.withValues(alpha: 0.05),
             blurRadius: 20,
             offset: const Offset(0, 4),
           ),
@@ -145,12 +206,16 @@ class SpendingTrendChart extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.end,
-            children: data.map((d) {
+            children: data.asMap().entries.map((entry) {
+               final index = entry.key;
+               final d = entry.value;
               return _buildBar(
+                context,
                 label: d['label'] as String,
                 amount: d['amount'] as double,
                 maxAmount: safeMax,
                 isToday: d['isToday'] as bool? ?? false,
+                index: index,
               );
             }).toList(),
           ),
@@ -159,20 +224,25 @@ class SpendingTrendChart extends StatelessWidget {
     );
   }
 
-  Widget _buildBar({required String label, required double amount, required double maxAmount, bool isToday = false}) {
+  Widget _buildBar(BuildContext context, {required String label, required double amount, required double maxAmount, required bool isToday, required int index}) {
+    // Determine color based on amount relative to max
+    // High bars get a slightly more intense color
+    Color barColor = isToday ? AppColors.primary : AppColors.chartInactive;
+
     return Expanded(
       child: Column(
         children: [
+          // Bar
           TweenAnimationBuilder<double>(
             tween: Tween<double>(begin: 0, end: amount / maxAmount),
-            duration: const Duration(milliseconds: 1500),
+            duration: Duration(milliseconds: 1200 + (index * 100)),
             curve: Curves.elasticOut,
             builder: (context, value, _) {
               return Container(
                 width: 12,
-                height: 120 * value, // Max height
+                height: max(120 * value, 4), // Min height 4 for visibility
                 decoration: BoxDecoration(
-                  color: isToday ? AppColors.primary : AppColors.chartInactive,
+                  color: barColor,
                   borderRadius: BorderRadius.circular(6),
                 ),
               );
@@ -192,7 +262,7 @@ class SpendingTrendChart extends StatelessWidget {
   }
 }
 
-// --- Category Breakdown Tile (Upgraded) ---
+// --- Category Breakdown Tile (Refined) ---
 class CategoryBreakdownTile extends StatelessWidget {
   final String category;
   final double amount;
@@ -217,7 +287,6 @@ class CategoryBreakdownTile extends StatelessWidget {
       'Bills': '⚡',
       'Health': '💊',
       'Education': '📚',
-      'Transfers': '💸',
       'Others': '✨',
     };
     return map[category] ?? '✨';

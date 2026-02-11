@@ -2,23 +2,42 @@ import 'package:flutter/cupertino.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 
+import '../../models/transaction_model.dart';
+import 'package:intl/intl.dart';
+
 class WeeklyExpenseChart extends StatelessWidget {
-  const WeeklyExpenseChart({super.key});
+  final List<Transaction> transactions;
+
+  const WeeklyExpenseChart({
+    super.key,
+    required this.transactions,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // Dummy data for the week (Monday to Sunday)
-    final weekData = [
-      {'day': 'Mon', 'amount': 45.0},
-      {'day': 'Tue', 'amount': 120.0},
-      {'day': 'Wed', 'amount': 85.0},
-      {'day': 'Thu', 'amount': 32.0},
-      {'day': 'Fri', 'amount': 95.0},
-      {'day': 'Sat', 'amount': 12.0},
-      {'day': 'Sun', 'amount': 65.0},
-    ];
+    // Calculate last 7 days
+    final weekData = List.generate(7, (index) {
+      final date = DateTime.now().subtract(Duration(days: 6 - index));
+      final dayName = DateFormat('E').format(date); // Mon, Tue, etc.
+      
+      // Sum transactions for this day
+      final dailyAmount = transactions
+          .where((t) => 
+              t.date.year == date.year && 
+              t.date.month == date.month && 
+              t.date.day == date.day)
+          .fold(0.0, (sum, t) => sum + t.amount);
 
-    final maxAmount = weekData.map((d) => d['amount'] as double).reduce((a, b) => a > b ? a : b);
+      return {
+        'day': dayName,
+        'amount': dailyAmount,
+        'isToday': index == 6, // Last item is today
+      };
+    });
+
+    // Find max amount for scaling (min 100 to avoid division by zero or huge bars for tiny amounts)
+    final maxRec = weekData.map((d) => d['amount'] as double).reduce((a, b) => a > b ? a : b);
+    final maxAmount = maxRec > 100 ? maxRec : 100.0;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -36,6 +55,7 @@ class WeeklyExpenseChart extends StatelessWidget {
                 day: data['day'] as String,
                 amount: data['amount'] as double,
                 maxAmount: maxAmount,
+                isToday: data['isToday'] as bool,
               );
             }).toList(),
           ),
@@ -48,18 +68,22 @@ class WeeklyExpenseChart extends StatelessWidget {
     required String day,
     required double amount,
     required double maxAmount,
+    required bool isToday,
   }) {
     final heightRatio = amount / maxAmount;
-    final barHeight = 120 * heightRatio;
-    final isToday = day == _getCurrentDay();
-
+    // Cap height at 1.0 (100%) to prevent overflow if max calculation is slightly off
+    final safeRatio = heightRatio > 1.0 ? 1.0 : heightRatio; 
+    
+    // Max height 120, min visible height 4
+    final barHeight = 120 * safeRatio;
+    
     return Column(
       children: [
         // Amount label
         SizedBox(
           height: 20,
           child: Text(
-            amount > 0 ? '₹${amount.toStringAsFixed(0)}' : '',
+            amount > 0 ? '₹${amount > 999 ? '${(amount/1000).toStringAsFixed(1)}k' : amount.toStringAsFixed(0)}' : '',
             style: AppTextStyles.label.copyWith(
               fontSize: 10,
               color: AppColors.textSecondary,
@@ -70,7 +94,7 @@ class WeeklyExpenseChart extends StatelessWidget {
         // Bar
         Container(
           width: 32,
-          height: barHeight > 20 ? barHeight : 20,
+          height: barHeight > 4 ? barHeight : 4,
           decoration: BoxDecoration(
             color: isToday ? AppColors.primary : AppColors.chartInactive,
             borderRadius: BorderRadius.circular(8),
@@ -87,10 +111,5 @@ class WeeklyExpenseChart extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  String _getCurrentDay() {
-    final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return days[DateTime.now().weekday - 1];
   }
 }

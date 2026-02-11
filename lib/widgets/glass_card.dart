@@ -1,6 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart'; // Needed for Colors.white with opacity sometimes, though CupertinoColors works.
+// Needed for Colors.white with opacity sometimes, though CupertinoColors works.
 
 class GlassCard extends StatelessWidget {
   final Widget child;

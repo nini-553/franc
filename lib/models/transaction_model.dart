@@ -27,5 +27,37 @@ class Transaction {
     this.confidenceScore,
   });
 
+  factory Transaction.fromJson(Map<String, dynamic> json) {
+    return Transaction(
+      id: json['id']?.toString() ?? '',
+      amount: (json['amount'] is num) ? (json['amount'] as num).toDouble() : 0.0,
+      merchant: json['merchant'] ?? 'Unknown',
+      category: json['category'] ?? 'Others',
+      date: DateTime.tryParse(json['date'] ?? '') ?? DateTime.now(),
+      paymentMethod: json['paymentMethod'] ?? 'Other',
+      status: json['status'] ?? 'completed',
+      receiptUrl: json['receiptUrl'],
+      isRecurring: json['isRecurring'] ?? false,
+      isAutoDetected: json['isAutoDetected'] ?? false,
+      referenceNumber: json['referenceNumber'],
+      confidenceScore: (json['confidenceScore'] is num) ? (json['confidenceScore'] as num).toDouble() : null,
+    );
+  }
 
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'amount': amount,
+      'merchant': merchant,
+      'category': category,
+      'date': date.toIso8601String(),
+      'paymentMethod': paymentMethod,
+      'status': status,
+      'receiptUrl': receiptUrl,
+      'isRecurring': isRecurring,
+      'isAutoDetected': isAutoDetected,
+      'referenceNumber': referenceNumber,
+      'confidenceScore': confidenceScore,
+    };
+  }
 }

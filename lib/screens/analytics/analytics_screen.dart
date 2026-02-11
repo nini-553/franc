@@ -1,10 +1,8 @@
-import 'package:flutter/material.dart';
+
 import 'package:flutter/cupertino.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
-import '../../utils/constants.dart';
-import '../../models/transaction_model.dart';
-import '../../services/transaction_storage_service.dart';
+import '../../services/analytics_service.dart';
 import 'analytics_widgets.dart';
 
 class AnalyticsScreen extends StatefulWidget {
@@ -15,24 +13,48 @@ class AnalyticsScreen extends StatefulWidget {
 }
 
 class _AnalyticsScreenState extends State<AnalyticsScreen> {
-  int _selectedPeriod = 0; // 0: Week, 1: Month
-  List<Transaction> _transactions = [];
   bool _isLoading = true;
-  final double _monthlyBudget = 15000.0; // Simulated user budget
+  
+  // Data State
+  double _totalSpent = 0;
+  double _monthlyBudget = 5000;
+  List<Map<String, dynamic>> _weeklyData = [];
+  Map<String, double> _categoryTotals = {};
+  List<String> _insights = [];
 
   @override
   void initState() {
     super.initState();
-    _loadTransactions();
+    _loadData();
   }
 
-  Future<void> _loadTransactions() async {
-    final transactions = await TransactionStorageService.getAllTransactions();
-    if (mounted) {
-      setState(() {
-        _transactions = transactions;
-        _isLoading = false;
-      });
+  Future<void> _loadData() async {
+    try {
+      final data = await AnalyticsService.getAnalyticsData();
+      if (mounted) {
+        setState(() {
+          _totalSpent = (data['totalSpent'] as num).toDouble();
+          _monthlyBudget = (data['budget'] as num).toDouble();
+          
+          // Safe List Casting
+          _weeklyData = (data['weeklyData'] as List).map((item) => Map<String, dynamic>.from(item)).toList();
+          
+          // Safe Map Casting
+          _categoryTotals = Map<String, double>.from(data['categoryTotals']);
+          
+          _insights = List<String>.from(data['insights']);
+          
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading analytics: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          // Optionally handle error state
+        });
+      }
     }
   }
 
@@ -45,76 +67,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       );
     }
 
-    // --- DATA CALCULATION ---
-    final now = DateTime.now();
-    final periodDuration = _selectedPeriod == 0 ? 7 : 30; // Days
-    
-    // Filter transactions for the selected period
-    final periodTransactions = _transactions.where((t) {
-      final difference = now.difference(t.date).inDays;
-      return difference < periodDuration && difference >= 0;
-    }).toList();
-
-    final totalSpent = periodTransactions.fold(0.0, (sum, t) => sum + t.amount);
-
-    // Prepare Chart Data
-    List<Map<String, dynamic>> chartData = [];
-    if (_selectedPeriod == 0) {
-      // WEEKLY: Show last 7 days (Mon-Sun or relative)
-      // We'll show last 7 days ending today
-      for (int i = 6; i >= 0; i--) {
-        final day = now.subtract(Duration(days: i));
-        final dayTransactions = periodTransactions.where((t) => 
-          t.date.year == day.year && t.date.month == day.month && t.date.day == day.day
-        );
-        final dayTotal = dayTransactions.fold(0.0, (sum, t) => sum + t.amount);
-        
-        // Label: "M", "T", "W"...
-        final weekdays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-        final label = weekdays[day.weekday - 1];
-        
-        chartData.add({
-          'label': label,
-          'amount': dayTotal,
-          'isToday': i == 0,
-        });
-      }
-    } else {
-      // MONTHLY: Show last 4 weeks
-      for (int i = 3; i >= 0; i--) {
-         // Simplified 4-week split
-         final weekStart = now.subtract(Duration(days: (i * 7) + 6));
-         final weekEnd = now.subtract(Duration(days: i * 7));
-         
-         final weekTransactions = periodTransactions.where((t) => 
-            t.date.isAfter(weekStart.subtract(const Duration(seconds: 1))) && 
-            t.date.isBefore(weekEnd.add(const Duration(days: 1))) // Inclusiveish
-         );
-         
-         final weekTotal = weekTransactions.fold(0.0, (sum, t) => sum + t.amount);
-         
-         chartData.add({
-           'label': 'W${4-i}',
-           'amount': weekTotal,
-           'isToday': i == 0, // Highlight current week
-         });
-      }
-    }
-
-    // Category Breakdown
-    final categoryTotals = <String, double>{};
-    for (var t in periodTransactions) {
-      categoryTotals[t.category] = (categoryTotals[t.category] ?? 0) + t.amount;
-    }
-    final sortedCategories = categoryTotals.entries.toList()
+    final sortedCategories = _categoryTotals.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-
 
     return CupertinoPageScaffold(
       backgroundColor: AppColors.background,
       child: SafeArea(
         child: CustomScrollView(
-          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+          physics: const BouncingScrollPhysics(),
           slivers: [
             // Header
             SliverToBoxAdapter(
@@ -124,7 +84,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text('Analytics', style: AppTextStyles.h1),
-                    // Currency Badge
+                    // Month Badge
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
@@ -132,75 +92,69 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(color: AppColors.border),
                       ),
-                      child: Text('INR', style: AppTextStyles.label),
+                      child: Text('This Month', style: AppTextStyles.label),
                     ),
                   ],
                 ),
               ),
             ),
             
-            // Toggle
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE5E7EB),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    children: [
-                      _buildToggle('Week', 0),
-                      _buildToggle('Month', 1),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
-
-            // Budget Ring
+            // 1. Budget Ring
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: BudgetRingCard(
-                  spent: totalSpent,
-                  budget: _selectedPeriod == 0 ? _monthlyBudget / 4 : _monthlyBudget,
+                  spent: _totalSpent,
+                  budget: _monthlyBudget,
                 ),
               ),
             ),
 
             const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
-            // Chart
+            // 2. Insights Section (New)
+            if (_insights.isNotEmpty) ...[
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Text('Insights for you', style: AppTextStyles.h3),
+                ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 12)),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      return InsightCard(text: _insights[index], index: index);
+                    },
+                    childCount: _insights.length,
+                  ),
+                ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            ],
+
+            // 3. Weekly Activity Chart
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: SpendingTrendChart(data: chartData),
+                child: SpendingTrendChart(data: _weeklyData),
               ),
             ),
 
             const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
-            // Category Title
+            // 4. Category Breakdown
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Row(
-                  children: [
-                    Text('Breakdown', style: AppTextStyles.h3),
-                    const Spacer(),
-                    Text('Sort by date', style: AppTextStyles.caption), // Static for now
-                  ],
-                ),
+                child: Text('Spending by Category', style: AppTextStyles.h3),
               ),
             ),
             
             const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-            // Category List or Empty State
             sortedCategories.isEmpty 
              ? SliverToBoxAdapter(
                  child: Padding(
@@ -212,7 +166,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                        Text('No spending yet', style: AppTextStyles.h3),
                        const SizedBox(height: 8),
                        Text(
-                         'Start tracking to see your insights.',
+                         'Start tracking to see your stats!',
                          style: AppTextStyles.bodySecondary,
                          textAlign: TextAlign.center,
                        ),
@@ -226,7 +180,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
                       final cat = sortedCategories[index];
-                      final percentage = totalSpent > 0 ? (cat.value / totalSpent) * 100 : 0.0;
+                      final percentage = _totalSpent > 0 ? (cat.value / _totalSpent) * 100 : 0.0;
                       
                       // Staggered Animation Wrapper
                       return TweenAnimationBuilder<double>(
@@ -259,34 +213,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               
               const SliverToBoxAdapter(child: SizedBox(height: 48)),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildToggle(String title, int index) {
-    final isSelected = _selectedPeriod == index;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _selectedPeriod = index),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: isSelected ? CupertinoColors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: isSelected 
-              ? [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 4, offset: const Offset(0, 2))] 
-              : null,
-          ),
-          child: Text(
-            title,
-            textAlign: TextAlign.center,
-            style: AppTextStyles.body.copyWith(
-              fontWeight: FontWeight.w600,
-              color: isSelected ? AppColors.textPrimary : AppColors.textSecondary,
-            ),
-          ),
         ),
       ),
     );

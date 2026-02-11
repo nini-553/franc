@@ -115,7 +115,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     Text(
                       _selectedPlan == 0 ? 'per month' : 'per year',
                       style: AppTextStyles.body.copyWith(
-                        color: AppColors.textPrimary.withOpacity(0.7),
+                        color: AppColors.textPrimary.withValues(alpha: 0.7),
                       ),
                     ),
                     if (_selectedPlan == 1) ...[
@@ -126,7 +126,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: CupertinoColors.white.withOpacity(0.3),
+                          color: CupertinoColors.white.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
@@ -334,7 +334,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.2),
+              color: AppColors.primary.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(

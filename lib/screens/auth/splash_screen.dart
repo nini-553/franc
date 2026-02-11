@@ -118,7 +118,7 @@ class _SplashScreenState extends State<SplashScreen>
                         'Personal Finance',
                         style: AppTextStyles.body.copyWith(
                           fontSize: 16,
-                          color: AppColors.textPrimary.withOpacity(0.8),
+                          color: AppColors.textPrimary.withValues(alpha: 0.8),
                         ),
                       ),
                     ],

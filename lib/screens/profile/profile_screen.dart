@@ -1,8 +1,21 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart'; // Full import needed for Material, InkWell, CircleAvatar
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/constants.dart';
+import '../../services/analytics_service.dart';
+import '../../services/profile_service.dart';
+import '../../services/auth_service.dart';
+import '../auth/auth_gate.dart';
 import 'subscription_screen.dart';
+import 'terms_screen.dart';
+import 'privacy_screen.dart';
+import 'support_screen.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -12,449 +25,155 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  // Data
   double _monthlyBudget = 5000.0;
   String _selectedCurrency = '₹ INR';
   bool _notificationsEnabled = true;
   bool _biometricEnabled = false;
+  
+  String _userName = 'Student';
+  String _userEmail = 'student@undiyal.com';
+  String? _profileImagePath;
 
-  final List<String> _currencies = [
-    '₹ INR',
-    '\$ USD',
-    '€ EUR',
-    '£ GBP',
-    '¥ JPY',
-  ];
+  final List<String> _currencies = ['₹ INR', '\$ USD', '€ EUR', '£ GBP', '¥ JPY'];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final budget = await AnalyticsService.getBudget();
+    final profile = await ProfileService.getProfile();
+    final prefs = await ProfileService.getPreferences();
+    
+    if (mounted) {
+      setState(() {
+        _monthlyBudget = budget;
+        _userName = profile['name'];
+        _userEmail = profile['email'];
+        _profileImagePath = profile['imagePath'];
+        
+        _selectedCurrency = prefs['currency'];
+        _notificationsEnabled = prefs['notifications'];
+        _biometricEnabled = prefs['biometric'];
+      });
+    }
+  }
+
+  Future<void> _savePreference(String key, dynamic value) async {
+    await ProfileService.savePreference(key, value);
+  }
 
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
       backgroundColor: AppColors.background,
+      navigationBar: CupertinoNavigationBar(
+        middle: Text('My Profile', style: AppTextStyles.h3),
+        backgroundColor: AppColors.background,
+        border: null,
+      ),
       child: SafeArea(
         child: CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
-            // Header
+            const SliverToBoxAdapter(child: SizedBox(height: 20)),
+
+            // 1. Profile Header (Card Style)
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppConstants.screenPadding,
-                  16,
-                  AppConstants.screenPadding,
-                  0,
-                ),
-                child: Row(
-                  children: [
-                    Text(
-                      'Profile',
-                      style: AppTextStyles.h2,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
-
-            // Profile Card
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppConstants.screenPadding,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: AppConstants.screenPadding),
                 child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: AppColors.cardBackground,
+                    color: CupertinoColors.white,
                     borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 80,
-                        height: 80,
-                        decoration: const BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Text(
-                            'JD',
-                            style: AppTextStyles.h2.copyWith(
-                              color: AppColors.textPrimary,
-                              fontSize: 32,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'John Doe',
-                        style: AppTextStyles.h2.copyWith(
-                          color: AppColors.textOnCard,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'john.doe@example.com',
-                        style: AppTextStyles.body.copyWith(
-                          color: AppColors.textOnCard.withOpacity(0.7),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      GestureDetector(
-                        onTap: () => _editProfile(context),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                CupertinoIcons.pencil,
-                                color: AppColors.textOnCard,
-                                size: 16,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Edit Profile',
-                                style: AppTextStyles.body.copyWith(
-                                  color: AppColors.textOnCard,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.03),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
-                ),
-              ),
-            ),
-
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
-
-            // Budget Section
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppConstants.screenPadding,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Budget Settings',
-                      style: AppTextStyles.h3,
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: CupertinoColors.white,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Column(
-                        children: [
-                          _buildSettingRow(
-                            icon: CupertinoIcons.money_dollar_circle,
-                            title: 'Monthly Budget',
-                            trailing: GestureDetector(
-                              onTap: () => _showBudgetPicker(context),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    '₹${_monthlyBudget.toStringAsFixed(0)}',
-                                    style: AppTextStyles.body.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.textSecondary,
+                  child: Row(
+                    children: [
+                      // Large Profile Picture
+                      GestureDetector(
+                        onTap: () => _editProfile(context),
+                        child: Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.2),
+                            shape: BoxShape.circle,
+                            image: _profileImagePath != null
+                                ? DecorationImage(
+                                    image: FileImage(File(_profileImagePath!)),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
+                          ),
+                          child: _profileImagePath == null
+                              ? Center(
+                                  child: Text(
+                                    _userName.isNotEmpty
+                                        ? _userName.substring(0, 1).toUpperCase()
+                                        : 'U',
+                                    style: AppTextStyles.h1.copyWith(
+                                      color: AppColors.primary,
+                                      fontSize: 32,
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  const Icon(
-                                    CupertinoIcons.chevron_right,
-                                    color: AppColors.textSecondary,
-                                    size: 16,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 32),
-                          _buildSettingRow(
-                            icon: CupertinoIcons.money_dollar,
-                            title: 'Currency',
-                            trailing: GestureDetector(
-                              onTap: () => _showCurrencyPicker(context),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    _selectedCurrency,
-                                    style: AppTextStyles.body.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  const Icon(
-                                    CupertinoIcons.chevron_right,
-                                    color: AppColors.textSecondary,
-                                    size: 16,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
-
-            // Preferences Section
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppConstants.screenPadding,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Preferences',
-                      style: AppTextStyles.h3,
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: CupertinoColors.white,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Column(
-                        children: [
-                          _buildSettingRow(
-                            icon: CupertinoIcons.bell,
-                            title: 'Notifications',
-                            trailing: CupertinoSwitch(
-                              value: _notificationsEnabled,
-                              activeTrackColor: AppColors.primary,
-                              onChanged: (value) {
-                                setState(() {
-                                  _notificationsEnabled = value;
-                                });
-                              },
-                            ),
-                          ),
-                          const SizedBox(height: 32),
-                          _buildSettingRow(
-                            icon: CupertinoIcons.lock_shield,
-                            title: 'Biometric Lock',
-                            trailing: CupertinoSwitch(
-                              value: _biometricEnabled,
-                              activeTrackColor: AppColors.primary,
-                              onChanged: (value) {
-                                setState(() {
-                                  _biometricEnabled = value;
-                                });
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
-
-            // Subscription Section
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppConstants.screenPadding,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Subscription',
-                      style: AppTextStyles.h3,
-                    ),
-                    const SizedBox(height: 12),
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.of(context).push(
-                          CupertinoPageRoute(
-                            builder: (context) => const SubscriptionScreen(),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [
-                              AppColors.primary,
-                              AppColors.primaryDark,
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(20),
+                                )
+                              : null,
                         ),
-                        child: Row(
+                      ),
+                      const SizedBox(width: 20),
+                      // Info
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              width: 48,
-                              height: 48,
-                              decoration: BoxDecoration(
-                                color: CupertinoColors.white.withOpacity(0.3),
-                                borderRadius: BorderRadius.circular(12),
+                            Text(
+                              _userName,
+                              style: AppTextStyles.h3.copyWith(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
                               ),
-                              child: const Icon(
-                                CupertinoIcons.star_fill,
-                                color: AppColors.textPrimary,
-                                size: 24,
-                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Free Plan',
-                                    style: AppTextStyles.body.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Upgrade to Premium',
-                                    style: AppTextStyles.caption.copyWith(
-                                      color: AppColors.textPrimary
-                                          .withOpacity(0.7),
-                                    ),
-                                  ),
-                                ],
+                            const SizedBox(height: 4),
+                            Text(
+                              _userEmail,
+                              style: AppTextStyles.body.copyWith(
+                                color: AppColors.textSecondary,
+                                fontSize: 14,
                               ),
-                            ),
-                            const Icon(
-                              CupertinoIcons.chevron_right,
-                              color: AppColors.textPrimary,
-                              size: 20,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
-
-            // More Options
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppConstants.screenPadding,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'More',
-                      style: AppTextStyles.h3,
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: CupertinoColors.white,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Column(
-                        children: [
-                          _buildActionRow(
-                            icon: CupertinoIcons.doc_text,
-                            title: 'Terms & Conditions',
-                            onTap: () =>
-                                _showComingSoon(context, 'Terms & Conditions'),
+                      // Edit Icon
+                      CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        onPressed: () => _editProfile(context),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.background,
+                            shape: BoxShape.circle,
                           ),
-                          const SizedBox(height: 32),
-                          _buildActionRow(
-                            icon: CupertinoIcons.lock_shield,
-                            title: 'Privacy Policy',
-                            onTap: () =>
-                                _showComingSoon(context, 'Privacy Policy'),
+                          child: const Icon(
+                            CupertinoIcons.pencil,
+                            color: AppColors.textPrimary,
+                            size: 20,
                           ),
-                          const SizedBox(height: 32),
-                          _buildActionRow(
-                            icon: CupertinoIcons.question_circle,
-                            title: 'Help & Support',
-                            onTap: () =>
-                                _showComingSoon(context, 'Help & Support'),
-                          ),
-                          const SizedBox(height: 32),
-                          _buildActionRow(
-                            icon: CupertinoIcons.info_circle,
-                            title: 'About Undiyal',
-                            onTap: () => _showAbout(context),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SliverToBoxAdapter(child: SizedBox(height: 32)),
-
-            // Logout Button
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppConstants.screenPadding,
-                ),
-                child: CupertinoButton(
-                  color: AppColors.error.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(16),
-                  onPressed: () => _logout(context),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        CupertinoIcons.arrow_right_square,
-                        color: AppColors.error,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Logout',
-                        style: AppTextStyles.body.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.error,
                         ),
                       ),
                     ],
@@ -465,162 +184,370 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             const SliverToBoxAdapter(child: SizedBox(height: 32)),
 
-            // Version info
+            // 2. General Section
+            _buildSectionHeader('General'),
             SliverToBoxAdapter(
-              child: Center(
-                child: Text(
-                  'Version 1.0.0',
-                  style: AppTextStyles.caption,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppConstants.screenPadding),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.white,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Column(
+                    children: [
+                      _buildMenuItem(
+                        icon: CupertinoIcons.money_dollar_circle,
+                        title: 'Monthly Budget',
+                        trailingText: '₹${_monthlyBudget.toStringAsFixed(0)}',
+                        onTap: () => _showBudgetPicker(context),
+                        isFirst: true,
+                      ),
+                      _buildDivider(),
+                      _buildMenuItem(
+                        icon: CupertinoIcons.money_dollar,
+                        title: 'Currency',
+                        trailingText: _selectedCurrency,
+                        onTap: () => _showCurrencyPicker(context),
+                      ),
+                      _buildDivider(),
+                      _buildMenuItem(
+                        icon: CupertinoIcons.star,
+                        title: 'Subscription',
+                        trailingText: 'Free',
+                        onTap: () => Navigator.of(context).push(
+                          CupertinoPageRoute(builder: (context) => const SubscriptionScreen()),
+                        ),
+                        isLast: true,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+
+            // 3. Preferences Section
+            _buildSectionHeader('Preferences'),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppConstants.screenPadding),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.white,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Column(
+                    children: [
+                      _buildSwitchItem(
+                        icon: CupertinoIcons.bell,
+                        title: 'Notifications',
+                        value: _notificationsEnabled,
+                        onChanged: (val) {
+                          setState(() => _notificationsEnabled = val);
+                          _savePreference('notifications_enabled', val);
+                        },
+                        isFirst: true,
+                      ),
+                      _buildDivider(),
+                      _buildSwitchItem(
+                        icon: CupertinoIcons.lock_shield,
+                        title: 'Biometric Lock',
+                        value: _biometricEnabled,
+                        onChanged: (val) {
+                          setState(() => _biometricEnabled = val);
+                          _savePreference('biometric_enabled', val);
+                        },
+                        isLast: true,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+
+            // 4. Support Section
+            _buildSectionHeader('Support'),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppConstants.screenPadding),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.white,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Column(
+                    children: [
+                      _buildMenuItem(
+                        icon: CupertinoIcons.question_circle,
+                        title: 'Need Help?',
+                        onTap: () => Navigator.of(context).push(
+                          CupertinoPageRoute(builder: (context) => const SupportScreen()),
+                        ),
+                        isFirst: true,
+                      ),
+                      _buildDivider(),
+                      _buildMenuItem(
+                        icon: CupertinoIcons.shield,
+                        title: 'Privacy Policy',
+                        onTap: () => Navigator.of(context).push(
+                          CupertinoPageRoute(builder: (context) => const PrivacyScreen()),
+                        ),
+                      ),
+                      _buildDivider(),
+                      _buildMenuItem(
+                        icon: CupertinoIcons.doc_text,
+                        title: 'Terms of Service',
+                        onTap: () => Navigator.of(context).push(
+                          CupertinoPageRoute(builder: (context) => const TermsScreen()),
+                        ),
+                        isLast: true,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
 
             const SliverToBoxAdapter(child: SizedBox(height: 32)),
+
+            // 5. Logout Button
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppConstants.screenPadding),
+                child: CupertinoButton(
+                  color: CupertinoColors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  onPressed: () => _logout(context),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(CupertinoIcons.arrow_right_square, color: AppColors.error),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Log Out', 
+                        style: AppTextStyles.body.copyWith(
+                          color: AppColors.error, 
+                          fontWeight: FontWeight.w600
+                        )
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 48)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSettingRow({
-    required IconData icon,
-    required String title,
-    required Widget trailing,
-  }) {
-    return Row(
-      children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: AppColors.primary.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(
-            icon,
-            color: AppColors.textPrimary,
-            size: 20,
-          ),
+  // --- Widgets ---
+
+  Widget _buildSectionHeader(String title) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(AppConstants.screenPadding, 0, AppConstants.screenPadding, 12),
+        child: Text(
+          title,
+          style: AppTextStyles.h3.copyWith(fontSize: 18),
         ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Text(
-            title,
-            style: AppTextStyles.body,
-          ),
-        ),
-        trailing,
-      ],
+      ),
     );
   }
 
-  Widget _buildActionRow({
+  Widget _buildMenuItem({
     required IconData icon,
     required String title,
+    String? trailingText,
     required VoidCallback onTap,
+    bool isFirst = false,
+    bool isLast = false,
   }) {
-    return GestureDetector(
-      onTap: onTap,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.vertical(
+          top: isFirst ? const Radius.circular(20) : Radius.zero,
+          bottom: isLast ? const Radius.circular(20) : Radius.zero,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Row(
+            children: [
+              Icon(icon, color: AppColors.textPrimary, size: 22),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(title, style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500)),
+              ),
+              if (trailingText != null)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Text(
+                    trailingText,
+                    style: AppTextStyles.body.copyWith(color: AppColors.textSecondary, fontSize: 14),
+                  ),
+                ),
+              const Icon(CupertinoIcons.chevron_right, color: AppColors.textSecondary, size: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSwitchItem({
+    required IconData icon,
+    required String title,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    bool isFirst = false,
+    bool isLast = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       child: Row(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              icon,
-              color: AppColors.textPrimary,
-              size: 20,
-            ),
-          ),
+          Icon(icon, color: AppColors.textPrimary, size: 22),
           const SizedBox(width: 16),
           Expanded(
-            child: Text(
-              title,
-              style: AppTextStyles.body,
-            ),
+            child: Text(title, style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500)),
           ),
-          const Icon(
-            CupertinoIcons.chevron_right,
-            color: AppColors.textSecondary,
-            size: 16,
+          CupertinoSwitch(
+            value: value,
+            activeColor: AppColors.primary,
+            onChanged: onChanged,
           ),
         ],
       ),
     );
   }
 
+  Widget _buildDivider() {
+    return const Divider(height: 1, indent: 56, endIndent: 20, color: Color(0xFFEEEEEE));
+  }
+
+  // --- Logic ---
+
   void _editProfile(BuildContext context) {
-    showCupertinoDialog(
+    final nameController = TextEditingController(text: _userName);
+    String? tempImagePath = _profileImagePath;
+
+    showCupertinoModalPopup(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: Text('Edit Profile'),
-        content: Text('Profile editing feature coming soon!'),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text('OK'),
-          ),
-        ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Container(
+            height: 400,
+            padding: const EdgeInsets.all(24),
+            decoration: const BoxDecoration(
+              color: CupertinoColors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      child: const Text('Cancel'),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                    Text('Edit Profile', style: AppTextStyles.h3),
+                    CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      child: const Text('Save'),
+                      onPressed: () async {
+                        if (nameController.text.isNotEmpty) {
+                          await ProfileService.saveProfile(
+                            name: nameController.text,
+                            imagePath: tempImagePath,
+                          );
+                          _loadData();
+                          if (mounted) Navigator.of(context).pop();
+                        }
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                GestureDetector(
+                  onTap: () async {
+                    final picker = ImagePicker();
+                    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+                    if (pickedFile != null) {
+                      final appDir = await getApplicationDocumentsDirectory();
+                      final fileName = path.basename(pickedFile.path);
+                      final savedImage = await File(pickedFile.path).copy('${appDir.path}/$fileName');
+                      setModalState(() {
+                        tempImagePath = savedImage.path;
+                      });
+                    }
+                  },
+                  child: CircleAvatar(
+                    radius: 50,
+                    backgroundColor: AppColors.primary.withOpacity(0.1),
+                    backgroundImage: tempImagePath != null ? FileImage(File(tempImagePath!)) : null,
+                    child: tempImagePath == null
+                        ? const Icon(CupertinoIcons.camera, size: 40, color: AppColors.primary)
+                        : null,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text('Tap to change photo'),
+                const SizedBox(height: 24),
+                CupertinoTextField(
+                  controller: nameController,
+                  placeholder: 'Full Name',
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 
   void _showBudgetPicker(BuildContext context) {
     double tempBudget = _monthlyBudget;
-
     showCupertinoModalPopup(
       context: context,
       builder: (BuildContext context) => Container(
-        height: 300,
+        height: 280,
         color: CupertinoColors.white,
         child: Column(
           children: [
-            Row(
+             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                CupertinoButton(
-                  child: Text('Cancel'),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-                Text(
-                  'Set Monthly Budget',
-                  style: AppTextStyles.body.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                CupertinoButton(
-                  child: Text('Done'),
-                  onPressed: () {
-                    setState(() {
-                      _monthlyBudget = tempBudget;
-                    });
-                    Navigator.of(context).pop();
-                  },
-                ),
+                CupertinoButton(child: const Text('Cancel'), onPressed: () => Navigator.pop(context)),
+                Text('Set Budget', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.bold)),
+                CupertinoButton(child: const Text('Done'), onPressed: () {
+                   AnalyticsService.setBudget(tempBudget);
+                   setState(() => _monthlyBudget = tempBudget);
+                   Navigator.pop(context);
+                }),
               ],
             ),
             Expanded(
               child: CupertinoPicker(
-                scrollController: FixedExtentScrollController(
-                  initialItem: (_monthlyBudget / 500).round(),
-                ),
+                scrollController: FixedExtentScrollController(initialItem: (_monthlyBudget / 500).round() - 1),
                 itemExtent: 40,
-                onSelectedItemChanged: (index) {
-                  tempBudget = (index + 1) * 500.0;
-                },
-                children: List.generate(40, (index) {
-                  final amount = (index + 1) * 500;
-                  return Center(
-                    child: Text(
-                      '₹$amount',
-                      style: AppTextStyles.body,
-                    ),
-                  );
-                }),
+                onSelectedItemChanged: (index) => tempBudget = (index + 1) * 500.0,
+                children: List.generate(40, (index) => Center(child: Text('₹${(index + 1) * 500}'))),
               ),
             ),
           ],
@@ -633,48 +560,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showCupertinoModalPopup(
       context: context,
       builder: (BuildContext context) => Container(
-        height: 300,
+        height: 250,
         color: CupertinoColors.white,
         child: Column(
           children: [
-            Row(
+             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                CupertinoButton(
-                  child: Text('Cancel'),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-                Text(
-                  'Select Currency',
-                  style: AppTextStyles.body.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                CupertinoButton(
-                  child: Text('Done'),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
+                CupertinoButton(child: const Text('Cancel'), onPressed: () => Navigator.pop(context)),
+                Text('Select Currency', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.bold)),
+                CupertinoButton(child: const Text('Done'), onPressed: () => Navigator.pop(context)),
               ],
             ),
             Expanded(
               child: CupertinoPicker(
-                scrollController: FixedExtentScrollController(
-                  initialItem: _currencies.indexOf(_selectedCurrency),
-                ),
                 itemExtent: 40,
                 onSelectedItemChanged: (index) {
-                  setState(() {
-                    _selectedCurrency = _currencies[index];
-                  });
+                   setState(() => _selectedCurrency = _currencies[index]);
+                   _savePreference('currency', _currencies[index]);
                 },
-                children: _currencies.map((currency) {
-                  return Center(
-                    child: Text(
-                      currency,
-                      style: AppTextStyles.body,
-                    ),
-                  );
-                }).toList(),
+                children: _currencies.map((c) => Center(child: Text(c))).toList(),
               ),
             ),
           ],
@@ -683,58 +588,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _showComingSoon(BuildContext context, String feature) {
-    showCupertinoDialog(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: Text(feature),
-        content: Text('This feature is coming soon!'),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showAbout(BuildContext context) {
-    showCupertinoDialog(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: Text('About Undiyal'),
-        content: Text(
-          'Undiyal v1.0.0\n\nA student-focused personal finance app that helps you track expenses with minimal effort.\n\nMade with ❤️ for students.',
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _logout(BuildContext context) {
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
-        title: Text('Logout'),
-        content: Text('Are you sure you want to logout?'),
+        title: const Text('Log Out'),
+        content: const Text('Are you sure you want to log out?'),
         actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text('Cancel'),
-          ),
+          CupertinoDialogAction(child: const Text('Cancel'), onPressed: () => Navigator.pop(context)),
           CupertinoDialogAction(
             isDestructiveAction: true,
-            onPressed: () {
-              Navigator.of(context).pop();
-              // Handle logout logic
+            child: const Text('Log Out'),
+            onPressed: () async {
+              await AuthService.logout();
+              await ProfileService.clearAllData();
+              if (mounted) {
+                 Navigator.of(context).pushAndRemoveUntil(
+                    CupertinoPageRoute(builder: (context) => const AuthGate()),
+                    (route) => false,
+                 );
+              }
             },
-            child: Text('Logout'),
           ),
         ],
       ),
