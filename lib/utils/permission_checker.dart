@@ -24,11 +24,12 @@ class PermissionChecker {
     return permissions;
   }
 
-  /// Check if critical permissions are granted
+  /// Check if critical permissions are granted (both SMS and notification required)
   static Future<bool> hasCriticalPermissions() async {
     final smsStatus = await Permission.sms.status;
     final notificationStatus = await Permission.notification.status;
     
+    // Both SMS and notification are required
     return smsStatus.isGranted && notificationStatus.isGranted;
   }
 

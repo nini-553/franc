@@ -6,11 +6,13 @@ import '../utils/constants.dart';
 class BalanceCard extends StatelessWidget {
   final double balance;
   final double weeklySpent;
+  final String? bankName;
 
   const BalanceCard({
     super.key,
     required this.balance,
     required this.weeklySpent,
+    this.bankName,
   });
 
   @override
@@ -25,12 +27,44 @@ class BalanceCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Wallet Balance',
-            style: AppTextStyles.cardBody.copyWith(
-              fontSize: 14,
-              color: AppColors.textOnCard.withValues(alpha: 0.7),
-            ),
+          Row(
+            children: [
+              Text(
+                bankName != null && bankName!.isNotEmpty ? '$bankName Balance' : 'Wallet Balance',
+                style: AppTextStyles.cardBody.copyWith(
+                  fontSize: 14,
+                  color: AppColors.textOnCard.withValues(alpha: 0.7),
+                ),
+              ),
+              const SizedBox(width: 6),
+              // Info icon for zero balance
+              if (balance == 0)
+                GestureDetector(
+                  onTap: () {
+                    showCupertinoDialog(
+                      context: context,
+                      builder: (context) => CupertinoAlertDialog(
+                        title: const Text('Bank Balance'),
+                        content: const Text(
+                          'Your bank balance will remain zero until you set up bank balance checking.\n\n'
+                          'Tap the credit card icon at the top right to set it up anytime.',
+                        ),
+                        actions: [
+                          CupertinoDialogAction(
+                            child: const Text('OK'),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  child: Icon(
+                    CupertinoIcons.info_circle,
+                    color: AppColors.textOnCard.withValues(alpha: 0.7),
+                    size: 16,
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 8),
           Text(

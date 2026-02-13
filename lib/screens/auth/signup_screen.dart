@@ -4,8 +4,10 @@ import '../../theme/app_text_styles.dart';
 import '../../utils/constants.dart';
 import '../../services/auth_service.dart';
 import '../../services/profile_service.dart';
-import '../../navigation/bottom_nav.dart';
+import '../../services/transaction_storage_service.dart';
+import '../../services/sms_expense_service.dart';
 import 'login_screen.dart';
+import 'auth_gate.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -72,8 +74,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
       if (result['user_id'] != null && result['email'] != null) {
         await AuthService.saveUserData(result['user_id'], result['email']);
         
+        // Clear all old local data for new user
+        await TransactionStorageService.clearAllData();
+        await SmsExpenseService.clearAllData();
+        
         // Save Profile Name
-         // Save Profile Name
         await ProfileService.saveProfile(
           name: _nameController.text,
           email: result['email'],
@@ -83,11 +88,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
       // Close loading dialog
       if (mounted) Navigator.of(context).pop();
 
-      // Navigate directly to Home screen (BottomNavigation)
+      // Navigate to permission request screen for new user
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
           CupertinoPageRoute(
-            builder: (context) => const BottomNavigation(),
+            builder: (context) => const AuthGate(),
           ),
           (route) => false,
         );

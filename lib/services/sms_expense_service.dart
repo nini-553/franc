@@ -8,6 +8,8 @@ import '../models/transaction_model.dart';
 import 'notification_service.dart';
 import 'home_widget_service.dart';
 import 'expense_service.dart';
+import 'balance_sms_parser.dart';
+import '../utils/globals.dart';
 
 /// Service for automatically detecting expenses from SMS messages
 /// Works fully offline, no backend connection required
@@ -18,13 +20,18 @@ class SmsExpenseService {
   // Keywords that indicate transactional SMS (debit/expense)
   static const List<String> _transactionKeywords = [
     'dr', 'debit', 'debited', 'paid', 'spent', 'upi', 'txn', 'transaction',
-    'withdrawn', 'deducted', 'rs.', 'inr', 'rupees', 'credited to'
+    'withdrawn', 'deducted', 'rs.', 'inr', 'rupees', 'credited to',
+    'transfer', 'sent', 'charged', 'billed', 'purchase', 'payment',
+    'auto-debit', 'auto debit', 'emandate', 'nacha', 'imps', 'neft'
   ];
   
-  // Keywords to ignore (OTP, promotional, credit)
+  // Keywords to ignore (OTP, promotional, recharge offers)
   static const List<String> _ignoreKeywords = [
-    'otp', 'verification', 'promo', 'offer', 'discount', 'cr', 'credit',
-    'credited', 'received', 'deposit', 'balance', 'statement'
+    'otp', 'verification', 'promo', 'offer', 'discount', 'cashback', 'reward points',
+    'recharge now', 'recharge your', 'pack at rs', 'available with pack',
+    'watch every match', 'live on', 'jiohotstar', 'airtel xstream play',
+    'match-ready pack', 'subscription for', 'click i.airtel.in', 'offer for',
+    'recharge now to enjoy', 'days and also get', 'months in rs'
   ];
 
   /// Request SMS permission from user
@@ -56,14 +63,17 @@ class SmsExpenseService {
   /// DEMO: Read and parse SMS messages for expense detection
   /// Returns list of detected transactions
   static Future<List<Transaction>> detectExpensesFromSms({
-    int? limit = 5,
+    int? limit = 50,
     Duration? since,
   }) async {
+    debugPrint('=== SMS EXPENSE DETECTION STARTED ===');
+    
     // 1. Check permissions
     if (!await hasSmsPermission()) {
       debugPrint('SMS permission not granted');
       // For demo, try to request it if not granted
       if (!await requestSmsPermission()) {
+        debugPrint('SMS permission denied - aborting detection');
         return [];
       }
     }
@@ -73,33 +83,72 @@ class SmsExpenseService {
       final SmsQuery query = SmsQuery();
       
       // 2. Read recent SMS (Last 1-5 messages is enough)
+      debugPrint('Reading SMS messages (limit: ${limit ?? 50})...');
       List<SmsMessage> messages = await query.querySms(
         kinds: [SmsQueryKind.inbox],
-        count: limit ?? 5,
+        count: limit ?? 50,
       );
+      
+      debugPrint('Found ${messages.length} SMS messages to process');
 
       final existingTransactions = await getStoredTransactions();
+      debugPrint('Found ${existingTransactions.length} existing transactions');
       
-      // 3. Process messages
+      // 3. Process messages - COLLECT ALL TRANSACTIONS
+      List<Transaction> detectedTransactions = [];
+      int processedCount = 0;
+      int skippedCount = 0;
+      int balanceCount = 0;
+      int expenseCount = 0;
+      
       for (var message in messages) {
+        processedCount++;
         final body = message.body ?? '';
+        final sender = message.address ?? 'Unknown';
+        
+        debugPrint('--- Processing SMS ${processedCount}/${messages.length} ---');
+        debugPrint('Sender: $sender');
+        debugPrint('Body (first 100 chars): ${body.take(100)}...');
         
         // Check if this SMS was already processed
         final processedIds = await _getProcessedReferences();
         if (processedIds.contains(message.id.toString())) {
-          debugPrint('Skipping processed msg ID: ${message.id}');
+          debugPrint('Skipping already processed msg ID: ${message.id}');
+          skippedCount++;
           continue;
         }
         
-        // 4. Parse the SMS using robust logic
-        final parsedData = _parseSmsForExpense(body);
+        // 4a. Check for BALANCE SMS first
+        final balanceData = BalanceSmsParser.parseBalanceSms(body, sender);
+        if (balanceData != null) {
+          debugPrint('✓ Detected balance SMS: ${balanceData['bank']} - Rs.${balanceData['balance']}');
+          balanceCount++;
+          await BalanceSmsParser.storeBalance(
+            balanceData['bank'] as String,
+            balanceData['balance'] as double,
+          );
+          await _markSmsAsProcessed(message.id.toString());
+          
+          // Navigate to home if navigator is available
+          if (navigatorKey.currentState != null) {
+            navigatorKey.currentState!.popUntil((route) => route.isFirst);
+          }
+          
+          // Don't return here, continue to check for expenses in same SMS if any
+          continue;
+        }
+        
+        // 4b. Parse the SMS for EXPENSE using robust logic
+        final parsedData = parseSmsForExpense(body);
         
         if (parsedData == null) {
-           debugPrint('Failed to parse/ignore SMS');
+           debugPrint('✗ Not a transaction SMS or ignored');
+           await _markSmsAsProcessed(message.id.toString()); // Mark to avoid reprocessing
+           skippedCount++;
            continue;
         }
 
-        debugPrint('Parsed data: $parsedData');
+        debugPrint('✓ Parsed transaction data: $parsedData');
         
         double amount = parsedData['amount'];
         String merchantName = parsedData['merchant'];
@@ -108,13 +157,14 @@ class SmsExpenseService {
 
         // LOW CONFIDENCE / UNKNOWN MERCHANT CHECK
         if (merchantName == 'Unknown Merchant' || merchantName.isEmpty) {
-           debugPrint('Low confidence transaction detected. Triggering notification.');
+           debugPrint('⚠ Low confidence transaction detected - triggering notification');
            await NotificationService.showExpenseNotification(
              amount: amount,
              date: message.date ?? DateTime.now(),
            );
            // Mark as processed so we don't notify again
            await _markSmsAsProcessed(message.id.toString());
+           skippedCount++;
            continue; // Do NOT save automatically
         }
 
@@ -129,8 +179,9 @@ class SmsExpenseService {
         });
 
         if (isDuplicate) {
-          debugPrint('Skipping duplicate transaction for $merchantName');
+          debugPrint('⚠ Skipping duplicate transaction for $merchantName');
           await _markSmsAsProcessed(message.id.toString());
+          skippedCount++;
           continue; 
         }
 
@@ -139,33 +190,50 @@ class SmsExpenseService {
           id: _generateTransactionId(),
           amount: amount,
           merchant: merchantName,
-          category: _categorizeExpense(merchantName, amount)['category'],
+          category: categorizeExpense(merchantName, amount)['category'],
           paymentMethod: paymentMethod,
           isAutoDetected: true,
           date: message.date ?? DateTime.now(),
           referenceNumber: refNumber,
-          confidenceScore: 1.0, 
+          confidenceScore: 1.0,
+          type: parsedData['type'] ?? 'expense',
         );
 
-        debugPrint('Auto-detected transaction: ${transaction.merchant} - ${transaction.amount}');
+        debugPrint('✓ Auto-detected transaction: ${transaction.merchant} - ₹${transaction.amount} (${transaction.type})');
 
-        // 6. Save ONLY ONE auto-detected transaction (per run cycle, typically)
-        await saveTransactions([transaction]);
+        // Add to collection instead of returning immediately
+        detectedTransactions.add(transaction);
+        expenseCount++;
         await _markSmsAsProcessed(message.id.toString());
-
-        // Sync to backend
-        try {
-          await ExpenseService.addExpense(transaction);
-        } catch (e) {
-          debugPrint('Failed to sync SMS transaction to backend: $e');
-        }
+      }
+      
+      // 6. Save ALL detected transactions at once
+      if (detectedTransactions.isNotEmpty) {
+        await saveTransactions(detectedTransactions);
+        debugPrint('✓ Saved ${detectedTransactions.length} transactions from SMS');
         
-        return [transaction]; // Return immediately after processing one
-            }
-
-      return [];
+        // Sync to backend
+        for (var transaction in detectedTransactions) {
+          try {
+            await ExpenseService.addExpense(transaction);
+            debugPrint('✓ Synced transaction to backend: ${transaction.merchant}');
+          } catch (e) {
+            debugPrint('✗ Failed to sync SMS transaction to backend: $e');
+          }
+        }
+      }
+      
+      debugPrint('=== SMS DETECTION SUMMARY ===');
+      debugPrint('Total messages processed: $processedCount');
+      debugPrint('Balance messages found: $balanceCount');
+      debugPrint('Expense transactions found: $expenseCount');
+      debugPrint('Messages skipped: $skippedCount');
+      debugPrint('Transactions saved: ${detectedTransactions.length}');
+      debugPrint('=== SMS EXPENSE DETECTION COMPLETED ===');
+      
+      return detectedTransactions;
     } catch (e) {
-      debugPrint('Error reading SMS: $e');
+      debugPrint('✗ Error reading SMS: $e');
       return [];
     }
   }
@@ -173,7 +241,9 @@ class SmsExpenseService {
   /// Parse SMS message to extract expense information
   /// Returns map with amount, merchant, date, type, reference, paymentMethod
   /// Returns null if SMS is not a transactional expense
-  static Map<String, dynamic>? _parseSmsForExpense(String smsBody) {
+  static Map<String, dynamic>? parseSmsForExpense(String smsBody) {
+    debugPrint('Parsing SMS: ${smsBody.take(150)}...');
+    
     // 1. NORMALIZE UNICODE CHARACTERS TO ASCII
     // Bank of Baroda and others sometimes use specialized fonts
     String body = smsBody.toLowerCase().trim();
@@ -183,14 +253,18 @@ class SmsExpenseService {
                .replaceAll('𝖢𝗋', 'cr')
                .replaceAll('𝗍𝗈', 'to');
 
+    debugPrint('Normalized body: ${body.take(150)}...');
+
     // Check if SMS contains transaction keywords
     final hasTransactionKeyword = _transactionKeywords.any((keyword) => body.contains(keyword));
+    debugPrint('Has transaction keyword: $hasTransactionKeyword');
     if (!hasTransactionKeyword) {
       return null;
     }
 
     // Check if SMS should be ignored (OTP, promotional, credit)
     final shouldIgnore = _ignoreKeywords.any((keyword) => body.contains(keyword));
+    debugPrint('Should ignore based on keywords: $shouldIgnore');
     if (shouldIgnore) {
       // Logic for "Cr." in the user's SMS:
       // "Dr. from ... and Cr. to ..." -> This IS a debit for the user.
@@ -199,6 +273,7 @@ class SmsExpenseService {
       // So if it contains "dr. from", it's likely an expense, identifying it as a debit
       if (!body.contains('dr. from') && !body.contains('debited')) {
          if (body.contains('cr') || body.contains('credit') || body.contains('credited')) {
+           debugPrint('Ignoring credit message without debit pattern');
            return null;
          }
       }
@@ -216,19 +291,33 @@ class SmsExpenseService {
       amount = double.tryParse(amountStr ?? '');
     }
 
+    debugPrint('Extracted amount: $amount from pattern: $amountStr');
     if (amount == null || amount <= 0) {
+      debugPrint('No valid amount found, aborting parse');
       return null; // No valid amount found
     }
 
     // Determine transaction type (debit/credit)
-    String transactionType = 'debit';
-    // User's specific format "Dr. from" is explicitly a debit
-    if (body.contains('dr. from')) {
-      transactionType = 'debit';
-    } else if (body.contains('cr') || body.contains('credit') || body.contains('credited')) {
-       // If it doesn't have "dr. from" but has "credit", it's income (ignore for now)
-       if (!body.contains('and cr. to')) { // "and Cr. to" implies destination of debit
-          return null; 
+    String transactionType = 'expense';
+    String? creditSource;
+    
+    // User's specific format "Dr. from" is explicitly a debit/expense
+    if (body.contains('dr. from') || body.contains('debited') || body.contains('paid')) {
+      transactionType = 'expense';
+      debugPrint('Identified as expense/debit transaction');
+    } else if (body.contains('cr') || body.contains('credit') || body.contains('credited') || body.contains('received')) {
+       // Check if it's a legitimate credit (money received)
+       if (!body.contains('and cr. to')) { // "and Cr. to" implies destination of debit, not a credit
+          transactionType = 'credit';
+          debugPrint('Identified as credit transaction');
+          
+          // Try to extract source for credits
+          final creditFromPattern = RegExp(r'(?:from|credited by|received from)\s+([a-zA-Z0-9\.@]+)', caseSensitive: false);
+          final creditMatch = creditFromPattern.firstMatch(body);
+          if (creditMatch != null) {
+            creditSource = creditMatch.group(1);
+            debugPrint('Credit source: $creditSource');
+          }
        }
     }
 
@@ -240,8 +329,15 @@ class SmsExpenseService {
     final crToPattern = RegExp(r'cr\.\s*to\s+([^\s]+)', caseSensitive: false);
     final crToMatch = crToPattern.firstMatch(body);
     
-    if (crToMatch != null) {
+    debugPrint('Cr. to pattern match: ${crToMatch?.group(1)}');
+    
+    // For credit transactions, use the source as merchant
+    if (transactionType == 'credit' && creditSource != null) {
+      merchant = creditSource;
+      debugPrint('Using credit source as merchant: $merchant');
+    } else if (crToMatch != null) {
       String rawMerchant = crToMatch.group(1) ?? '';
+      debugPrint('Raw merchant from Cr. to pattern: $rawMerchant');
       // Clean up trailing dots or generic text
       if (rawMerchant.endsWith('.')) rawMerchant = rawMerchant.substring(0, rawMerchant.length - 1);
       
@@ -264,14 +360,17 @@ class SmsExpenseService {
       } else {
         merchant = rawMerchant;
       }
+      debugPrint('Processed merchant name: $merchant');
     } else {
         // Fallback patterns
+        debugPrint('Trying fallback merchant patterns...');
         
         // Pattern 1: UPI ID
         final upiPattern = RegExp(r'(\w+(?:\.\w+)*@\w+)', caseSensitive: false);
         final upiMatch = upiPattern.firstMatch(body);
         if (upiMatch != null) {
            merchant = 'UPI Payment'; // Generic if we cant parse name
+           debugPrint('Found UPI ID, using generic merchant name');
         }
 
         // Pattern 3: Common merchant names
@@ -282,6 +381,7 @@ class SmsExpenseService {
         for (var keyword in merchantKeywords) {
           if (body.contains(keyword)) {
             merchant = keyword.substring(0, 1).toUpperCase() + keyword.substring(1);
+            debugPrint('Found merchant keyword: $keyword');
             break;
           }
         }
@@ -298,6 +398,7 @@ class SmsExpenseService {
     final refMatch = refPattern.firstMatch(body);
     if (refMatch != null) {
       referenceNumber = refMatch.group(1);
+      debugPrint('Found reference number: $referenceNumber');
     }
     
     // Extract Date from SMS content if available: (2026:01:29 08:17:19)
@@ -313,6 +414,7 @@ class SmsExpenseService {
            if (parts.length == 2) {
              final timePart = parts[1].replaceAll('-', ':');
              transactionDate = DateTime.parse('${parts[0]} $timePart');
+             debugPrint('Parsed transaction date: $transactionDate');
            }
         }
       } catch (e) {
@@ -323,7 +425,7 @@ class SmsExpenseService {
     String paymentMethod = 'UPI'; // Default for these bank alerts
     if (body.contains('card') || body.contains('debit card')) paymentMethod = 'Card';
 
-    return {
+    final result = {
       'amount': amount,
       'merchant': merchant,
       'date': transactionDate,
@@ -331,11 +433,14 @@ class SmsExpenseService {
       'reference': referenceNumber,
       'paymentMethod': paymentMethod,
     };
+
+    debugPrint('Final parsed result: $result');
+    return result;
   }
 
   /// AI-style expense categorization using rule-based + heuristic logic
   /// Returns category and confidence score (0-1)
-  static Map<String, dynamic> _categorizeExpense(String merchant, double amount) {
+  static Map<String, dynamic> categorizeExpense(String merchant, double amount) {
     final merchantLower = merchant.toLowerCase();
     double confidence = 0.0;
     String category = 'Others';
@@ -512,6 +617,7 @@ class SmsExpenseService {
       'isAutoDetected': tx.isAutoDetected,
       'referenceNumber': tx.referenceNumber,
       'confidenceScore': tx.confidenceScore,
+      'type': tx.type,
     };
   }
 
@@ -530,6 +636,7 @@ class SmsExpenseService {
       isAutoDetected: json['isAutoDetected'] as bool? ?? false,
       referenceNumber: json['referenceNumber'] as String?,
       confidenceScore: json['confidenceScore'] != null ? (json['confidenceScore'] as num).toDouble() : null,
+      type: json['type'] as String? ?? 'expense',
     );
   }
 
@@ -556,6 +663,44 @@ class SmsExpenseService {
     } catch (e) {
       debugPrint('Error clearing data: $e');
     }
+  }
+
+  /// Debug function to test SMS parsing with sample messages
+  static Future<void> debugTestSmsParsing() async {
+    debugPrint('=== SMS PARSING DEBUG TEST ===');
+    
+    final testMessages = [
+      'Dear Customer, Dr. from A/C No. XX7896 dated 26-JAN-2026 and Cr. to zepto.payu@axisbank. for Rs.105.00. Available Balance: Rs.8,500.00.',
+      'Thank you for using UPI. Transaction of Rs.299.00 to swiggy@hdfc successful. Ref no: 1234567890123456',
+      'Rs.150.00 debited from your account for UPI transaction to dharini1463@okicici. Ref: 987654321',
+      'Your account has been credited with Rs.500.00 from John Doe. Available balance: Rs.10000.00',
+      'OTP for your transaction is 123456. Please do not share.',
+      'Avl Bal Rs.8,500.00 as on 26-JAN-2026 18:30:00. Bank of Baroda',
+      // Promotional messages that should be ignored
+      'IND vs USA sorted with Airtel! Watch every match LIVE on JioHotstar, available with pack at Rs. 100 and also get 6GB for 30 days. Recharge now https://i.airtel.in/rc100upg',
+      'New match-ready pack is here! JioHotstar (1 month) + 6GB for 30 days at Rs100. Recharge your Airtel Prepaid now https://i.airtel.in/rc100upg',
+      'Offer for 8122XXX048 ! Recharge now to enjoy 12GB data, Airtel Xstream Play, 30 days and also get JioHotstar Mobile Subscription for 3 months in Rs195. Click i.airtel.in/rc195sil',
+    ];
+
+    for (int i = 0; i < testMessages.length; i++) {
+      debugPrint('\n--- Test Message ${i + 1} ---');
+      debugPrint('Message: ${testMessages[i]}');
+      
+      final result = parseSmsForExpense(testMessages[i]);
+      if (result != null) {
+        debugPrint('✓ Parsed successfully: $result');
+      } else {
+        // Check if it's a balance SMS
+        final balanceResult = BalanceSmsParser.parseBalanceSms(testMessages[i], 'TEST');
+        if (balanceResult != null) {
+          debugPrint('✓ Balance SMS detected: $balanceResult');
+        } else {
+          debugPrint('✗ Not a transaction SMS (correctly ignored)');
+        }
+      }
+    }
+    
+    debugPrint('=== SMS PARSING DEBUG TEST COMPLETED ===');
   }
 }
 

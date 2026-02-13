@@ -1,17 +1,18 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart'; // Full import needed for Material, InkWell, CircleAvatar
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/constants.dart';
-import '../../services/analytics_service.dart';
 import '../../services/profile_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/biometric_service.dart';
+import '../../services/settings_service.dart';
 import '../auth/auth_gate.dart';
 import 'subscription_screen.dart';
 import 'terms_screen.dart';
 import 'privacy_screen.dart';
 import 'support_screen.dart';
+import '../settings/sms_notification_settings_screen.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -30,6 +31,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _selectedCurrency = '₹ INR';
   bool _notificationsEnabled = true;
   bool _biometricEnabled = false;
+  String? _biometricName = 'Biometric';
+  bool _isBiometricAvailable = false;
   
   String _userName = 'Student';
   String _userEmail = 'student@undiyal.com';
@@ -41,21 +44,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _loadData();
+    _checkBiometricAvailability();
+  }
+
+  Future<void> _checkBiometricAvailability() async {
+    final isAvailable = await BiometricService.isDeviceSupported();
+    final biometricName = await BiometricService.getPrimaryBiometricName();
+    if (mounted) {
+      setState(() {
+        _isBiometricAvailable = isAvailable;
+        _biometricName = biometricName;
+      });
+    }
   }
 
   Future<void> _loadData() async {
-    final budget = await AnalyticsService.getBudget();
+    final budget = await SettingsService.getMonthlyBudget();
+    final currency = await SettingsService.getCurrency();
     final profile = await ProfileService.getProfile();
     final prefs = await ProfileService.getPreferences();
     
     if (mounted) {
       setState(() {
         _monthlyBudget = budget;
+        _selectedCurrency = currency;
         _userName = profile['name'];
         _userEmail = profile['email'];
         _profileImagePath = profile['imagePath'];
         
-        _selectedCurrency = prefs['currency'];
         _notificationsEnabled = prefs['notifications'];
         _biometricEnabled = prefs['biometric'];
       });
@@ -253,11 +269,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       _buildDivider(),
                       _buildSwitchItem(
                         icon: CupertinoIcons.lock_shield,
-                        title: 'Biometric Lock',
-                        value: _biometricEnabled,
+                        title: _biometricName != null ? '$_biometricName Lock' : 'Biometric Lock',
+                        value: _biometricEnabled && _isBiometricAvailable,
                         onChanged: (val) {
-                          setState(() => _biometricEnabled = val);
-                          _savePreference('biometric_enabled', val);
+                          if (_isBiometricAvailable) {
+                            _handleBiometricToggle(val);
+                          }
                         },
                         isLast: true,
                       ),
@@ -288,6 +305,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           CupertinoPageRoute(builder: (context) => const SupportScreen()),
                         ),
                         isFirst: true,
+                      ),
+                      _buildDivider(),
+                      _buildMenuItem(
+                        icon: CupertinoIcons.settings,
+                        title: 'SMS Notifications',
+                        onTap: () => Navigator.of(context).push(
+                          CupertinoPageRoute(builder: (context) => const SmsNotificationSettingsScreen()),
+                        ),
                       ),
                       _buildDivider(),
                       _buildMenuItem(
@@ -436,6 +461,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // --- Logic ---
 
+  void _handleBiometricToggle(bool val) {
+    if (val) {
+      // Try to authenticate before enabling
+      BiometricService.authenticate().then((result) async {
+        if (result['success']) {
+          setState(() => _biometricEnabled = true);
+          await _savePreference('biometric_enabled', true);
+          await BiometricService.setBiometricLock(true);
+        } else {
+          // Show error
+          if (mounted) {
+            showCupertinoDialog(
+              context: context,
+              builder: (context) => CupertinoAlertDialog(
+                title: const Text('Authentication Failed'),
+                content: Text(result['message']),
+                actions: [
+                  CupertinoDialogAction(
+                    child: const Text('OK'),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            );
+          }
+        }
+      });
+    } else {
+      // Disabling biometric - no auth needed
+      setState(() => _biometricEnabled = false);
+      _savePreference('biometric_enabled', false);
+      BiometricService.setBiometricLock(false);
+    }
+  }
+
   void _editProfile(BuildContext context) {
     final nameController = TextEditingController(text: _userName);
     String? tempImagePath = _profileImagePath;
@@ -535,8 +595,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 CupertinoButton(child: const Text('Cancel'), onPressed: () => Navigator.pop(context)),
                 Text('Set Budget', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.bold)),
-                CupertinoButton(child: const Text('Done'), onPressed: () {
-                   AnalyticsService.setBudget(tempBudget);
+                CupertinoButton(child: const Text('Done'), onPressed: () async {
+                   await SettingsService.setMonthlyBudget(tempBudget);
                    setState(() => _monthlyBudget = tempBudget);
                    Navigator.pop(context);
                 }),
@@ -575,9 +635,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Expanded(
               child: CupertinoPicker(
                 itemExtent: 40,
-                onSelectedItemChanged: (index) {
-                   setState(() => _selectedCurrency = _currencies[index]);
-                   _savePreference('currency', _currencies[index]);
+                onSelectedItemChanged: (index) async {
+                   final newCurrency = _currencies[index];
+                   setState(() => _selectedCurrency = newCurrency);
+                   await SettingsService.setCurrency(newCurrency);
                 },
                 children: _currencies.map((c) => Center(child: Text(c))).toList(),
               ),

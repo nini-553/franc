@@ -15,4 +15,4 @@ void main() async {
   await AppInitService.initialize();
 
   runApp(const UndiyalApp());
-}
+} 

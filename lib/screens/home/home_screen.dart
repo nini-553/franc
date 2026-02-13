@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
@@ -6,9 +7,10 @@ import '../../models/transaction_model.dart';
 import '../../widgets/balance_card.dart';
 import '../../widgets/expense_tile.dart';
 import '../../services/transaction_storage_service.dart';
+import '../../services/balance_sms_parser.dart';
 import '../../services/app_init_service.dart';
 import 'home_widgets.dart';
-import '../add_expense/add_expense_screen.dart';
+import '../../screens/bank/bank_balance_setup_screen.dart';
 import '../transactions/transaction_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -18,22 +20,73 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<Transaction> _transactions = [];
+  double _bankBalance = 0.0;
+  String _bankName = '';
   bool _isLoading = true;
+  StreamSubscription<Map<String, dynamic>>? _balanceUpdateSubscription;
+  String _selectedTransactionType = 'expense'; // 'expense' or 'credit'
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadTransactions();
+    _subscribeToBalanceUpdates();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _balanceUpdateSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Refresh balance when app comes back to foreground
+      _refreshBalance();
+    }
+  }
+
+  Future<void> _refreshBalance() async {
+    final balanceData = await BalanceSmsParser.getLastBalance();
+    if (mounted && balanceData != null) {
+      setState(() {
+        _bankBalance = balanceData['balance'] ?? 0.0;
+        _bankName = BalanceSmsParser.getBankFullName(balanceData['bank'] ?? '');
+      });
+    }
+  }
+
+  void _subscribeToBalanceUpdates() {
+    _balanceUpdateSubscription = BalanceSmsParser.onBalanceUpdate.listen((data) {
+      if (mounted) {
+        setState(() {
+          _bankBalance = data['balance'] ?? 0.0;
+          _bankName = BalanceSmsParser.getBankFullName(data['bank'] ?? '');
+        });
+        debugPrint('Balance auto-updated: ${data['bank']} - Rs.${data['balance']}');
+      }
+    });
   }
 
   Future<void> _loadTransactions() async {
     // 1. Load stored transactions first (fast)
     final transactions = await TransactionStorageService.getAllTransactions();
+    
+    // 2. Load bank balance from SMS detection
+    final balanceData = await BalanceSmsParser.getLastBalance();
+    
     if (mounted) {
       setState(() {
         _transactions = transactions;
+        if (balanceData != null) {
+          _bankBalance = balanceData['balance'] ?? 0.0;
+          _bankName = BalanceSmsParser.getBankFullName(balanceData['bank'] ?? '');
+        }
         _isLoading = false;
       });
     }
@@ -68,10 +121,19 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    final recentTransactions = _transactions.take(3).toList();
+    // Calculate dynamic values
+    final balance = _bankBalance; // Default to 0 until bank balance is set up
     final weeklySpent = _transactions
         .where((t) => DateTime.now().difference(t.date).inDays <= 7)
         .fold(0.0, (sum, t) => sum + t.amount);
+    
+    // Filter transactions by type
+    final expenseTransactions = _transactions.where((t) => t.type == 'expense').toList();
+    final creditTransactions = _transactions.where((t) => t.type == 'credit').toList();
+    final displayTransactions = _selectedTransactionType == 'expense' 
+        ? expenseTransactions 
+        : creditTransactions;
+    final recentTransactions = displayTransactions.take(3).toList();
 
     return CupertinoPageScaffold(
       backgroundColor: AppColors.background,
@@ -102,25 +164,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       Row(
                         children: [
                           GestureDetector(
-                            onTap: () async {
-                              setState(() => _isLoading = true);
-                              await _runBackgroundSmsScan();
-                              if (mounted) {
-                                  setState(() => _isLoading = false);
-                                  showCupertinoDialog(
-                                    context: context,
-                                    builder: (context) => CupertinoAlertDialog(
-                                      title: const Text('Sync Complete'),
-                                      content: const Text('Scanned last 50 SMS messages for expenses.'),
-                                      actions: [
-                                        CupertinoDialogAction(
-                                          child: const Text('OK'),
-                                          onPressed: () => Navigator.pop(context),
-                                        )
-                                      ],
-                                    ),
-                                  );
-                              }
+                            onTap: () {
+                              // Navigate to bank setup for checking balance
+                              Navigator.of(context).push(
+                                CupertinoPageRoute(
+                                  builder: (context) => BankBalanceSetupScreen(
+                                    onComplete: () => Navigator.of(context).pop(),
+                                  ),
+                                ),
+                              );
                             },
                             child: Container(
                               width: 44,
@@ -131,7 +183,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: const Icon(
-                                CupertinoIcons.arrow_2_circlepath,
+                                CupertinoIcons.creditcard,
                                 color: AppColors.textPrimary,
                                 size: 22,
                               ),
@@ -166,7 +218,7 @@ class _HomeScreenState extends State<HomeScreen> {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.all(AppConstants.screenPadding),
-                child: BalanceCard(balance: 2450.75, weeklySpent: weeklySpent),
+                child: BalanceCard(balance: balance, weeklySpent: weeklySpent, bankName: _bankName),
               ),
             ),
 
@@ -189,26 +241,103 @@ class _HomeScreenState extends State<HomeScreen> {
 
             const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
-            // Recent Transactions Header
+            // Recent Transactions Header with Segmented Control
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppConstants.screenPadding,
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Recent Transactions', style: AppTextStyles.h3),
-                    GestureDetector(
-                      onTap: () {
-                        // Navigate to full history (handled by tab bar)
-                      },
-                      child: Text(
-                        'See All',
-                        style: AppTextStyles.body.copyWith(
-                          color: AppColors.textSecondary,
-                          fontSize: 14,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Recent Transactions', style: AppTextStyles.h3),
+                        GestureDetector(
+                          onTap: () {
+                            // Navigate to full history (handled by tab bar)
+                          },
+                          child: Text(
+                            'See All',
+                            style: AppTextStyles.body.copyWith(
+                              color: AppColors.textSecondary,
+                              fontSize: 14,
+                            ),
+                          ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    // Segmented Control for Expense/Credit
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: AppColors.cardBackground,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedTransactionType = 'expense';
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: _selectedTransactionType == 'expense'
+                                      ? AppColors.primary
+                                      : CupertinoColors.transparent,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Expenses',
+                                  textAlign: TextAlign.center,
+                                  style: AppTextStyles.body.copyWith(
+                                    color: _selectedTransactionType == 'expense'
+                                        ? AppColors.textOnCard
+                                        : AppColors.textSecondary,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedTransactionType = 'credit';
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: _selectedTransactionType == 'credit'
+                                      ? AppColors.primary
+                                      : CupertinoColors.transparent,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Credits',
+                                  textAlign: TextAlign.center,
+                                  style: AppTextStyles.body.copyWith(
+                                    color: _selectedTransactionType == 'credit'
+                                        ? AppColors.textOnCard
+                                        : AppColors.textSecondary,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -246,50 +375,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
             const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
-            // Add Expense CTA
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppConstants.screenPadding,
-                ),
-                child: GestureDetector(
-                  onTap: () {
-                    Navigator.of(context).push(
-                      CupertinoPageRoute(
-                        builder: (context) => const AddExpenseScreen(),
-                      ),
-                    ).then((_) => _loadTransactions());
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          CupertinoIcons.add_circled,
-                          color: AppColors.textPrimary,
-                          size: 24,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Add Expense',
-                          style: AppTextStyles.body.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            const SliverToBoxAdapter(child: SizedBox(height: 32)),
+            // Add Expense CTA - REMOVED
           ],
         ),
       ),

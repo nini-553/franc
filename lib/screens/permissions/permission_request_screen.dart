@@ -64,7 +64,7 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen> {
 
     setState(() => _isRequesting = false);
 
-    // If both granted, proceed
+    // Require both permissions to proceed
     if (_smsGranted && _notificationGranted) {
       widget.onComplete();
     }
@@ -102,7 +102,7 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final allGranted = _smsGranted && _notificationGranted;
+    final allGranted = _smsGranted && _notificationGranted; // Both required
 
     return CupertinoPageScaffold(
       backgroundColor: AppColors.background,
@@ -128,7 +128,7 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen> {
               ),
               const SizedBox(height: 16),
               const Text(
-                'Undiyal needs a few permissions to automatically track your expenses',
+                'Undiyal needs these permissions to automatically track your expenses and keep you informed',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 16,
@@ -139,7 +139,7 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen> {
               _buildPermissionItem(
                 icon: CupertinoIcons.chat_bubble_text,
                 title: 'SMS Access',
-                description: 'Read transaction messages to auto-detect expenses',
+                description: 'Read transaction messages for automatic expense detection',
                 isGranted: _smsGranted,
               ),
               const SizedBox(height: 20),

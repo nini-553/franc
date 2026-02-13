@@ -4,7 +4,7 @@ import '../../theme/app_text_styles.dart';
 import '../../utils/constants.dart';
 import '../../services/auth_service.dart';
 import 'signup_screen.dart';
-import '../../navigation/bottom_nav.dart';
+import 'auth_gate.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -59,11 +59,11 @@ class _LoginScreenState extends State<LoginScreen> {
       // Close loading dialog
       if (mounted) Navigator.of(context).pop();
 
-      // Navigate to home screen (main app)
+      // Navigate to AuthGate to handle proper flow check
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
           CupertinoPageRoute(
-            builder: (context) => const BottomNavigation(),
+            builder: (context) => const AuthGate(),
           ),
           (route) => false,
         );

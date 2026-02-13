@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../services/analytics_service.dart';
+import '../../services/settings_service.dart';
 import 'analytics_widgets.dart';
 
 class AnalyticsScreen extends StatefulWidget {
@@ -31,10 +32,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   Future<void> _loadData() async {
     try {
       final data = await AnalyticsService.getAnalyticsData();
+      final budget = await SettingsService.getMonthlyBudget();
       if (mounted) {
         setState(() {
           _totalSpent = (data['totalSpent'] as num).toDouble();
-          _monthlyBudget = (data['budget'] as num).toDouble();
+          _monthlyBudget = budget;
           
           // Safe List Casting
           _weeklyData = (data['weeklyData'] as List).map((item) => Map<String, dynamic>.from(item)).toList();

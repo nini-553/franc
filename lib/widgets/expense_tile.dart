@@ -38,6 +38,8 @@ class ExpenseTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isCredit = transaction.type == 'credit';
+    
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -52,12 +54,14 @@ class ExpenseTile extends StatelessWidget {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.3),
+                color: isCredit 
+                    ? const Color(0xFF10B981).withValues(alpha: 0.2) // Green for credit
+                    : AppColors.primary.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                _getCategoryIcon(transaction.category),
-                color: AppColors.textPrimary,
+                isCredit ? CupertinoIcons.arrow_down_circle : _getCategoryIcon(transaction.category),
+                color: isCredit ? const Color(0xFF10B981) : AppColors.textPrimary,
                 size: 24,
               ),
             ),
@@ -80,14 +84,16 @@ class ExpenseTile extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.2),
+                            color: isCredit
+                                ? const Color(0xFF10B981).withValues(alpha: 0.2)
+                                : AppColors.primary.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            'Auto',
+                            isCredit ? 'Credit' : 'Auto',
                             style: AppTextStyles.label.copyWith(
                               fontSize: 10,
-                              color: AppColors.primary,
+                              color: isCredit ? const Color(0xFF10B981) : AppColors.primary,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -96,7 +102,7 @@ class ExpenseTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    transaction.category,
+                    isCredit ? 'Received' : transaction.category,
                     style: AppTextStyles.caption,
                   ),
                 ],
@@ -106,10 +112,12 @@ class ExpenseTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '-₹${transaction.amount.toStringAsFixed(2)}',
+                  isCredit 
+                      ? '+₹${transaction.amount.toStringAsFixed(2)}'
+                      : '-₹${transaction.amount.toStringAsFixed(2)}',
                   style: AppTextStyles.body.copyWith(
                     fontWeight: FontWeight.w600,
-                    color: AppColors.error,
+                    color: isCredit ? const Color(0xFF10B981) : AppColors.error,
                   ),
                 ),
                 const SizedBox(height: 4),

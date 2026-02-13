@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -80,42 +79,48 @@ class NotificationService {
     return result.isGranted;
   }
 
-  /// Show a friendly notification for an undetected expense
+  /// Show notification for new expense
   static Future<void> showExpenseNotification({
     required double amount,
     required DateTime date,
   }) async {
-    final random = Random();
-    final title = _titles[random.nextInt(_titles.length)];
-    final body = _bodies[random.nextInt(_bodies.length)];
-    // Add amount to body for context
-    final contextualBody = 'You spent ₹$amount. $body';
-
-    final payload = jsonEncode({
-      'amount': amount,
-      'date': date.toIso8601String(),
-    });
-
-    const AndroidNotificationDetails androidPlatformChannelSpecifics =
-        AndroidNotificationDetails(
-      _channelId,
-      _channelName,
-      channelDescription: _channelDesc,
-      importance: Importance.max,
-      priority: Priority.high,
-      showWhen: true,
-      styleInformation: BigTextStyleInformation(''), 
-    );
-
-    const NotificationDetails platformChannelSpecifics =
-        NotificationDetails(android: androidPlatformChannelSpecifics);
+    final title = _titles[DateTime.now().millisecond % _titles.length];
+    final body = _bodies[DateTime.now().millisecond % _bodies.length];
 
     await _notificationsPlugin.show(
-      DateTime.now().millisecond, // Unique ID based on time
+      0,
       title,
-      contextualBody,
-      platformChannelSpecifics,
-      payload: payload,
+      body,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channelId,
+          _channelName,
+          channelDescription: _channelDesc,
+          icon: '@mipmap/ic_launcher',
+        ),
+      ),
+      payload: jsonEncode({'type': 'expense', 'amount': amount}),
+    );
+  }
+
+  /// Show notification for balance update
+  static Future<void> showBalanceNotification({
+    required String bank,
+    required double balance,
+  }) async {
+    await _notificationsPlugin.show(
+      0,
+      '💰 Balance Updated',
+      '$bank: ₹${balance.toStringAsFixed(2)}',
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channelId,
+          _channelName,
+          channelDescription: _channelDesc,
+          icon: '@mipmap/ic_launcher',
+        ),
+      ),
+      payload: jsonEncode({'type': 'balance', 'bank': bank, 'balance': balance}),
     );
   }
 

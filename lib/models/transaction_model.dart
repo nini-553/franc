@@ -11,6 +11,7 @@ class Transaction {
   final bool isAutoDetected; // True if detected from SMS
   final String? referenceNumber; // SMS transaction reference
   final double? confidenceScore; // AI categorization confidence (0-1)
+  final String type; // 'expense' or 'credit'
 
   Transaction({
     required this.id,
@@ -25,6 +26,7 @@ class Transaction {
     this.isAutoDetected = false,
     this.referenceNumber,
     this.confidenceScore,
+    this.type = 'expense', // Default to expense
   });
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
@@ -41,6 +43,7 @@ class Transaction {
       isAutoDetected: json['isAutoDetected'] ?? false,
       referenceNumber: json['referenceNumber'],
       confidenceScore: (json['confidenceScore'] is num) ? (json['confidenceScore'] as num).toDouble() : null,
+      type: json['type'] ?? 'expense',
     );
   }
 
@@ -48,16 +51,17 @@ class Transaction {
     return {
       'id': id,
       'amount': amount,
-      'merchant': merchant,
+      'merchant_name': merchant,
       'category': category,
-      'date': date.toIso8601String(),
-      'paymentMethod': paymentMethod,
+      'invoice_date': date.toIso8601String(),
+      'payment_mode': paymentMethod,
       'status': status,
       'receiptUrl': receiptUrl,
       'isRecurring': isRecurring,
       'isAutoDetected': isAutoDetected,
       'referenceNumber': referenceNumber,
       'confidenceScore': confidenceScore,
+      'type': type,
     };
   }
 }

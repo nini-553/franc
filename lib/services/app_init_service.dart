@@ -10,20 +10,33 @@ class AppInitService {
   /// Initialize app: Setup services without requesting permissions
   static Future<void> initialize() async {
     try {
-      // PERFROM ONE-TIME CLEANUP (Migration to real data only)
+      // PERFORM ONE-TIME CLEANUP (Migration to real data only)
       final prefs = await SharedPreferences.getInstance();
-      final hasCleaned = prefs.getBool('has_cleaned_v2_data') ?? false; // Unique key for this update
+      final hasCleaned = prefs.getBool('has_cleaned_v2_data') ?? false;
 
+      debugPrint('Checking cleanup status: has_cleaned_v2_data = $hasCleaned');
+      
       if (!hasCleaned) {
         debugPrint('Performing one-time data cleanup...');
         await TransactionStorageService.clearAllData();
         await prefs.setBool('has_cleaned_v2_data', true);
         debugPrint('One-time cleanup complete.');
+        
+        // Verify the flag was set
+        final verifyCleaned = prefs.getBool('has_cleaned_v2_data');
+        debugPrint('Verification: has_cleaned_v2_data = $verifyCleaned');
+      } else {
+        debugPrint('One-time cleanup already completed, skipping...');
       }
 
       // Initialize Notifications (without requesting permission)
       await NotificationService.initialize();
       debugPrint('Notification service initialized');
+
+      // Request SMS permission
+      final smsPermissionGranted =
+          await SmsExpenseService.requestSmsPermission();
+      debugPrint('SMS permission granted: $smsPermissionGranted');
     } catch (e) {
       debugPrint('Error initializing app services: $e');
     }
@@ -34,17 +47,31 @@ class AppInitService {
     try {
       // Check if SMS permission is granted
       final hasPermission = await SmsExpenseService.hasSmsPermission();
-      
+
       if (hasPermission) {
         debugPrint('SMS permission granted, detecting expenses...');
-        
-        // Read last 50 SMS messages for initial detection
-        final detectedTransactions = await SmsExpenseService.detectExpensesFromSms(
-          limit: 50, 
+
+        // DEBUG: Run test parsing first
+        await SmsExpenseService.debugTestSmsParsing();
+
+        // Calculate messages from current month for comprehensive analysis
+        final now = DateTime.now();
+        final startOfMonth = DateTime(now.year, now.month, 1);
+        final daysSinceStartOfMonth = now.difference(startOfMonth).inDays;
+
+        debugPrint('Analyzing SMS from last $daysSinceStartOfMonth days (current month)');
+
+        // Read SMS from current month
+        final detectedTransactions =
+            await SmsExpenseService.detectExpensesFromSms(
+          since: Duration(days: daysSinceStartOfMonth),
+          limit: 500, // Read more messages for comprehensive analysis
         );
 
         if (detectedTransactions.isNotEmpty) {
-          debugPrint('Detected & Saved transaction from SMS');
+          debugPrint('Detected & Saved ${detectedTransactions.length} transactions from SMS');
+        } else {
+          debugPrint('No new transactions detected from SMS');
         }
       } else {
         debugPrint('SMS permission not granted');
@@ -59,9 +86,10 @@ class AppInitService {
     try {
       if (await SmsExpenseService.hasSmsPermission()) {
         // Read SMS from last 24 hours
-        final detectedTransactions = await SmsExpenseService.detectExpensesFromSms(
+        final detectedTransactions =
+            await SmsExpenseService.detectExpensesFromSms(
           since: const Duration(hours: 24),
-          limit: 50,
+          limit: 100,
         );
 
         if (detectedTransactions.isNotEmpty) {
@@ -84,4 +112,3 @@ class AppInitService {
     }
   }
 }
-

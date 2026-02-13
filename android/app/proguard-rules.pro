@@ -98,3 +98,12 @@
 
 # Keep widget provider
 -keep class com.undiyal.fintracker.deepblue.UndiyalWidgetProvider { *; }
+
+# Google Play Core (for deferred components compatibility)
+-dontwarn com.google.android.play.core.**
+-keep class com.google.android.play.core.** { *; }
+-keep interface com.google.android.play.core.** { *; }
+
+# Flutter deferred components
+-keep class io.flutter.embedding.engine.deferredcomponents.** { *; }
+-dontwarn io.flutter.embedding.engine.deferredcomponents.**
