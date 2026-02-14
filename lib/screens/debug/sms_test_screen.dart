@@ -84,7 +84,7 @@ class _SmsTestScreenState extends State<SmsTestScreen> {
               CupertinoButton(
                 onPressed: _isLoading ? null : _forceCleanup,
                 child: const Text(
-                  'Force Cleanup (Remove Mock Data)',
+                  'Force Cleanup (Clear All Data)',
                   style: TextStyle(color: CupertinoColors.systemOrange),
                 ),
               ),
@@ -277,7 +277,7 @@ Try: Give missed call to your bank's balance check number
           _status = '''
 ✓ Force cleanup complete!
 
-All mock data removed
+All transaction data cleared
 Cleanup flag reset
 
 Restart the app to scan SMS again

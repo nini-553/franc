@@ -4,7 +4,7 @@ import '../services/sms_expense_service.dart';
 
 /// Development tools for testing
 class DevTools {
-  /// Force cleanup and remove all mock data
+  /// Force cleanup and clear all transaction/SMS data
   static Future<void> forceCleanup() async {
     if (kDebugMode) {
       final prefs = await SharedPreferences.getInstance();
@@ -15,7 +15,7 @@ class DevTools {
       // Reset cleanup flag to force it to run again
       await prefs.setBool('has_cleaned_v2_data', false);
       
-      debugPrint('✓ Force cleanup complete - all mock data removed');
+      debugPrint('✓ Force cleanup complete - all transaction data cleared');
       debugPrint('✓ Cleanup flag reset - will run on next app init');
     }
   }

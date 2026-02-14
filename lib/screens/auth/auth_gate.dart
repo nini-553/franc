@@ -10,6 +10,8 @@ import '../permissions/permission_request_screen.dart';
 import '../home/blocked_home_screen.dart';
 import '../bank/bank_balance_setup_screen.dart';
 import '../settings/sms_notification_settings_screen.dart';
+import '../../services/sms_notification_listener.dart';
+import '../../services/balance_sms_parser.dart';
 
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
@@ -34,17 +36,27 @@ class _AuthGateState extends State<AuthGate> {
     final hasRequestedPermissions = prefs.getBool('has_requested_permissions') ?? false;
     final hasCompletedBankSetup = prefs.getBool('has_completed_bank_setup') ?? false;
     final biometricEnabled = prefs.getBool('biometric_enabled') ?? false;
-    
+
+    // Blocked when no balance OR bank setup not completed
+    double? availableBalance;
+    if (hasCompletedBankSetup) {
+      final balanceData = await BalanceSmsParser.getLastBalance();
+      final b = balanceData?['balance'];
+      availableBalance = b is num ? b.toDouble() : null;
+    }
+    final showBlockedHome = !hasCompletedBankSetup || availableBalance == null;
+
     // Check if biometric auth is required
     bool requiresBiometric = false;
     if (userId != null && biometricEnabled) {
       requiresBiometric = await BiometricService.isAuthRequired();
     }
-    
+
     return {
       'userId': userId,
       'hasRequestedPermissions': hasRequestedPermissions,
       'hasCompletedBankSetup': hasCompletedBankSetup,
+      'showBlockedHome': showBlockedHome,
       'requiresBiometric': requiresBiometric,
       'biometricEnabled': biometricEnabled,
     };
@@ -80,7 +92,7 @@ class _AuthGateState extends State<AuthGate> {
         final data = snapshot.data;
         final userId = data?['userId'];
         final hasRequestedPermissions = data?['hasRequestedPermissions'] ?? false;
-        final hasCompletedBankSetup = data?['hasCompletedBankSetup'] ?? false;
+        final showBlockedHome = data?['showBlockedHome'] ?? true;
         final requiresBiometric = data?['requiresBiometric'] ?? false;
         final biometricEnabled = data?['biometricEnabled'] ?? false;
 
@@ -101,12 +113,22 @@ class _AuthGateState extends State<AuthGate> {
           );
         }
 
-        // If permissions granted but bank setup not completed, show blocked home screen
-        if (!hasCompletedBankSetup) {
-          return const BlockedHomeScreen();
+        // If bank setup not completed OR no available balance, show blocked home
+        if (showBlockedHome) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            SmsNotificationListener.markInitializationComplete();
+          });
+          return BlockedHomeScreen(
+            onReturnFromSetup: () {
+              setState(() => _initFuture = _checkAuthAndPermissions());
+            },
+          );
         }
 
-        // User is authenticated, permissions handled, and bank setup completed
+        // User is authenticated, bank setup completed, balance available
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          SmsNotificationListener.markInitializationComplete();
+        });
         return const BottomNavigation();
       },
     );

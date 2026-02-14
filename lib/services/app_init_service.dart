@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/transaction_model.dart';
 import 'notification_service.dart';
 import 'sms_expense_service.dart';
+import 'sms_notification_listener.dart';
 import 'transaction_storage_service.dart';
 
 /// Service to initialize app and read SMS on launch
@@ -60,11 +61,12 @@ class AppInitService {
         debugPrint('Analyzing SMS from last $daysSinceStartOfMonth days (current month)');
         debugPrint('Will scan up to 500 messages');
 
-        // Read SMS from current month
+        // Read SMS from current month (suppress notifications during init)
         final detectedTransactions =
             await SmsExpenseService.detectExpensesFromSms(
           since: Duration(days: daysSinceStartOfMonth),
-          limit: 500, // Read more messages for comprehensive analysis
+          limit: 500,
+          suppressNotifications: true,
         );
 
         if (detectedTransactions.isNotEmpty) {
@@ -81,8 +83,10 @@ class AppInitService {
         }
         
         debugPrint('=== SMS DETECTION COMPLETE ===');
+        SmsNotificationListener.markInitializationComplete();
       } else {
         debugPrint('✗ SMS permission not granted - cannot detect expenses');
+        SmsNotificationListener.markInitializationComplete();
       }
     } catch (e) {
       debugPrint('✗ Error initializing SMS expense detection: $e');

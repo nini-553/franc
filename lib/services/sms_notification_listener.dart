@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'sms_expense_service.dart';
+import 'sms_parser_utils.dart';
 import 'balance_sms_parser.dart';
 import 'notification_service.dart';
 import '../models/transaction_model.dart';
@@ -13,8 +14,12 @@ import '../models/transaction_model.dart';
 /// More battery efficient than constant SMS scanning
 class SmsNotificationListener {
   static const String _listenerEnabledKey = 'sms_listener_enabled';
+  static const String _lastProcessedSmsIdKey = 'last_processed_sms_id';
   static const MethodChannel _channel = MethodChannel('sms_notification_listener');
   static bool _isListening = false;
+
+  /// Guard: notifications suppressed during login/init
+  static bool isInitializing = true;
 
   static final StreamController<Map<String, dynamic>> _smsController =
       StreamController<Map<String, dynamic>>.broadcast();
@@ -109,6 +114,12 @@ class SmsNotificationListener {
     }
   }
 
+  /// Mark initialization complete - notifications will now fire for new SMS
+  static void markInitializationComplete() {
+    isInitializing = false;
+    debugPrint('SMS listener: initialization complete, notifications enabled');
+  }
+
   /// Initialize: listener service
   static Future<void> initialize() async {
     try {
@@ -158,6 +169,22 @@ class SmsNotificationListener {
       final body = smsData['body'] as String? ?? '';
       final sender = smsData['sender'] as String? ?? '';
       final timestamp = smsData['timestamp'] as int?;
+      final smsId = smsData['id'] as String? ??
+          '${body.hashCode}_${timestamp ?? DateTime.now().millisecondsSinceEpoch}';
+
+      // Prevent repeated notifications for same SMS
+      final prefs = await SharedPreferences.getInstance();
+      final lastProcessed = prefs.getString(_lastProcessedSmsIdKey);
+      if (lastProcessed == smsId) {
+        debugPrint('SMS already processed (id: $smsId), skipping notification');
+        return;
+      }
+      await prefs.setString(_lastProcessedSmsIdKey, smsId);
+
+      // Do not fire notifications during login/init
+      if (isInitializing) {
+        debugPrint('SMS received during init - processing but suppressing notification');
+      }
 
       // Check if it's a balance SMS first
       final balanceData = BalanceSmsParser.parseBalanceSms(body, sender);
@@ -167,70 +194,79 @@ class SmsNotificationListener {
           balanceData['bank'] as String,
           balanceData['balance'] as double,
         );
-
-        // Show notification for balance update
-        await NotificationService.showBalanceNotification(
-          bank: balanceData['bank'] as String,
-          balance: balanceData['balance'] as double,
-        );
+        if (!isInitializing) {
+          await NotificationService.showBalanceNotification(
+            bank: balanceData['bank'] as String,
+            balance: balanceData['balance'] as double,
+          );
+        }
         return;
       }
 
       // Parse for expense
       final parsedData = SmsExpenseService.parseSmsForExpense(body);
-      if (parsedData != null) {
-        debugPrint('Instant expense detection: ${parsedData['merchant']} - Rs.${parsedData['amount']}');
+      if (parsedData == null) return;
 
-        // Check for duplicates
-        final existingTransactions = await SmsExpenseService.getStoredTransactions();
-        final isDuplicate = existingTransactions.any((tx) {
-          final refNumber = parsedData['reference'] as String?;
-          if (refNumber != null && tx.referenceNumber == refNumber) return true;
+      debugPrint('Instant expense detection: ${parsedData['merchant']} - Rs.${parsedData['amount']}');
 
-          // Fuzzy match: same amount, same merchant, same day
-          final smsDate = timestamp != null
-              ? DateTime.fromMillisecondsSinceEpoch(timestamp)
-              : DateTime.now();
-          final sameDay = tx.date.year == smsDate.year &&
-                         tx.date.month == smsDate.month &&
-                         tx.date.day == smsDate.day;
-          return tx.amount == parsedData['amount'] &&
-                 tx.merchant == parsedData['merchant'] &&
-                 sameDay;
-        });
+      // Check for duplicates
+      final existingTransactions = await SmsExpenseService.getStoredTransactions();
+      final smsDate = timestamp != null
+          ? DateTime.fromMillisecondsSinceEpoch(timestamp)
+          : (parsedData['date'] as DateTime? ?? DateTime.now());
+      final isDuplicate = existingTransactions.any((tx) {
+        final refNumber = parsedData['reference'] as String?;
+        if (refNumber != null && tx.referenceNumber == refNumber) return true;
+        final sameDay = tx.date.year == smsDate.year &&
+            tx.date.month == smsDate.month && tx.date.day == smsDate.day;
+        return tx.amount == parsedData['amount'] &&
+            tx.merchant == parsedData['merchant'] &&
+            sameDay;
+      });
 
-        if (!isDuplicate) {
-          // Create and save transaction instantly
-          final transaction = Transaction(
-            id: 'txn_${DateTime.now().millisecondsSinceEpoch}_${DateTime.now().microsecond % 1000}',
-            amount: parsedData['amount'],
-            merchant: parsedData['merchant'],
-            category: SmsExpenseService.categorizeExpense(parsedData['merchant'], parsedData['amount'])['category'],
-            paymentMethod: parsedData['paymentMethod'],
-            isAutoDetected: true,
-            date: timestamp != null
-                ? DateTime.fromMillisecondsSinceEpoch(timestamp)
-                : DateTime.now(),
-            referenceNumber: parsedData['reference'],
-            confidenceScore: 1.0,
-            type: parsedData['type'] ?? 'expense',
-          );
+      if (isDuplicate) {
+        debugPrint('Duplicate transaction detected, skipping');
+        return;
+      }
 
-          await SmsExpenseService.saveTransactions([transaction]);
+      final merchantName = parsedData['merchant'] as String;
+      final isUnknownMerchant = merchantName == 'Unknown' || merchantName.isEmpty;
 
-          // Show notification for new transaction
+      // Create and save transaction
+      final transaction = Transaction(
+        id: 'txn_${DateTime.now().millisecondsSinceEpoch}_${DateTime.now().microsecond % 1000}',
+        amount: parsedData['amount'],
+        merchant: isUnknownMerchant ? 'Unknown' : merchantName,
+        category: SmsExpenseService.categorizeExpense(merchantName, parsedData['amount'])['category'],
+        paymentMethod: parsedData['paymentMethod'],
+        isAutoDetected: true,
+        date: smsDate,
+        referenceNumber: parsedData['reference'],
+        confidenceScore: 1.0,
+        type: parsedData['type'] ?? 'expense',
+      );
+
+      await SmsExpenseService.saveTransactions([transaction]);
+
+      // Extract and store balance if present in same SMS
+      final balanceAmount = SmsParserUtils.extractBalance(body);
+      if (balanceAmount != null) {
+        await BalanceSmsParser.storeBalance('Unknown', balanceAmount);
+      }
+
+      // Notify only when init complete
+      if (!isInitializing) {
+        if (isUnknownMerchant) {
+          await NotificationService.showUnknownMerchantNotification();
+        } else {
           await NotificationService.showExpenseNotification(
             amount: parsedData['amount'],
-            date: timestamp != null
-                ? DateTime.fromMillisecondsSinceEpoch(timestamp)
-                : DateTime.now(),
+            date: smsDate,
           );
-
-          debugPrint('Instant transaction saved: ${transaction.merchant} - ₹${transaction.amount}');
-        } else {
-          debugPrint('Duplicate transaction detected, skipping');
         }
       }
+
+      debugPrint('Instant transaction saved: ${transaction.merchant} - ₹${transaction.amount}');
     } catch (e) {
       debugPrint('Error in instant SMS processing: $e');
     }

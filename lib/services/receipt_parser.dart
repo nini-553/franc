@@ -1,11 +1,7 @@
 class ReceiptParser {
-  // Simulated receipt parsing - UI placeholder only
+  /// Parse receipt image - returns empty data; user enters details manually.
+  /// Future: integrate OCR for auto-extraction.
   static Future<Map<String, dynamic>> parseReceipt(String imagePath) async {
-    // Simulate processing delay
-    await Future.delayed(const Duration(seconds: 2));
-
-    // Return empty data - force user to enter details
-    // In a real app, this would use OCR
     return {
       'amount': null,
       'merchant': '',
@@ -16,10 +12,8 @@ class ReceiptParser {
     };
   }
 
+  /// Parse from camera - returns empty data; user enters details manually.
   static Future<Map<String, dynamic>> parseReceiptFromCamera() async {
-    // Simulate camera capture and parsing
-    await Future.delayed(const Duration(seconds: 2));
-
     return {
       'amount': null,
       'merchant': '',
@@ -29,28 +23,6 @@ class ReceiptParser {
       'confidence': 0.0,
       'receiptImagePath': null,
     };
-  }
-
-  static List<String> suggestMerchants(String query) {
-    // Common merchant suggestions
-    final merchants = [
-      'Starbucks',
-      'McDonald\'s',
-      'Amazon',
-      'Walmart',
-      'Target',
-      'Uber',
-      'Lyft',
-      'Netflix',
-      'Spotify',
-      'Apple Store',
-    ];
-
-    if (query.isEmpty) return merchants;
-
-    return merchants
-        .where((m) => m.toLowerCase().contains(query.toLowerCase()))
-        .toList();
   }
 
   static String detectCategory(String merchant) {

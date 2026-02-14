@@ -26,16 +26,16 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  // Data
-  double _monthlyBudget = 5000.0;
+  // Data (initial values overwritten by _loadData from real storage)
+  double _monthlyBudget = 0;
   String _selectedCurrency = '₹ INR';
   bool _notificationsEnabled = true;
   bool _biometricEnabled = false;
   String? _biometricName = 'Biometric';
   bool _isBiometricAvailable = false;
-  
-  String _userName = 'Student';
-  String _userEmail = 'student@undiyal.com';
+
+  String _userName = '';
+  String _userEmail = '';
   String? _profileImagePath;
 
   final List<String> _currencies = ['₹ INR', '\$ USD', '€ EUR', '£ GBP', '¥ JPY'];
@@ -68,8 +68,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         _monthlyBudget = budget;
         _selectedCurrency = currency;
-        _userName = profile['name'];
-        _userEmail = profile['email'];
+        _userName = (profile['name'] as String?) ?? '';
+        _userEmail = (profile['email'] as String?) ?? '';
         _profileImagePath = profile['imagePath'];
         
         _notificationsEnabled = prefs['notifications'];
@@ -137,7 +137,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   child: Text(
                                     _userName.isNotEmpty
                                         ? _userName.substring(0, 1).toUpperCase()
-                                        : 'U',
+                                        : (_userEmail.isNotEmpty
+                                            ? _userEmail.substring(0, 1).toUpperCase()
+                                            : 'U'),
                                     style: AppTextStyles.h1.copyWith(
                                       color: AppColors.primary,
                                       fontSize: 32,

@@ -28,8 +28,8 @@ class ProfileService {
     final imagePath = prefs.getString(_keyUserImagePath);
 
     return {
-      'name': name ?? 'Student',
-      'email': email ?? 'student@undiyal.com',
+      'name': name ?? '',
+      'email': email ?? '',
       'imagePath': imagePath,
     };
   }

@@ -79,6 +79,24 @@ class NotificationService {
     return result.isGranted;
   }
 
+  /// Show notification when merchant could not be identified
+  static Future<void> showUnknownMerchantNotification() async {
+    await _notificationsPlugin.show(
+      1,
+      'Transaction detected',
+      'We couldn\'t identify the receiver. Tap to review.',
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channelId,
+          _channelName,
+          channelDescription: _channelDesc,
+          icon: '@mipmap/ic_launcher',
+        ),
+      ),
+      payload: jsonEncode({'type': 'unknown_merchant'}),
+    );
+  }
+
   /// Show notification for new expense
   static Future<void> showExpenseNotification({
     required double amount,
@@ -99,7 +117,11 @@ class NotificationService {
           icon: '@mipmap/ic_launcher',
         ),
       ),
-      payload: jsonEncode({'type': 'expense', 'amount': amount}),
+      payload: jsonEncode({
+        'type': 'expense',
+        'amount': amount,
+        'date': date.toIso8601String(),
+      }),
     );
   }
 
@@ -149,28 +171,38 @@ class NotificationService {
 
   /// Handle notification tap
   static void _onNotificationTapped(NotificationResponse response) {
-    if (response.payload != null) {
-      try {
-        final data = jsonDecode(response.payload!);
-        final amount = (data['amount'] as num).toDouble();
-        final date = DateTime.parse(data['date']);
+    if (response.payload == null) return;
+    try {
+      final data = jsonDecode(response.payload!) as Map<String, dynamic>;
+      final type = data['type'] as String?;
 
-        // Navigate to Manual Entry Screen with pre-filled data
+      if (type == 'unknown_merchant') {
+        if (navigatorKey.currentState != null) {
+          navigatorKey.currentState!.push(
+            CupertinoPageRoute(
+              builder: (context) => const ManualEntryScreen(),
+            ),
+          );
+        }
+        return;
+      }
+
+      final amount = data['amount'] as num?;
+      final dateStr = data['date'] as String?;
+      if (amount != null && dateStr != null) {
         if (navigatorKey.currentState != null) {
           navigatorKey.currentState!.push(
             CupertinoPageRoute(
               builder: (context) => ManualEntryScreen(
-                initialAmount: amount,
-                initialDate: date,
+                initialAmount: amount.toDouble(),
+                initialDate: DateTime.parse(dateStr),
               ),
             ),
           );
-        } else {
-            debugPrint('Navigator state is null, cannot navigate');
         }
-      } catch (e) {
-        debugPrint('Error parsing notification payload: $e');
       }
+    } catch (e) {
+      debugPrint('Error parsing notification payload: $e');
     }
   }
 }

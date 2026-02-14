@@ -2,111 +2,128 @@ import 'package:flutter/cupertino.dart';
 import '../../theme/app_colors.dart';
 import '../bank/bank_balance_setup_screen.dart';
 
+/// Mandatory blocked Home state when availableBalance == null OR bankSetupCompleted == false.
+/// User cannot access dashboard until setup complete. No back, no skip.
 class BlockedHomeScreen extends StatelessWidget {
-  const BlockedHomeScreen({super.key});
+  final VoidCallback? onReturnFromSetup;
+
+  const BlockedHomeScreen({super.key, this.onReturnFromSetup});
 
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
-      backgroundColor: const Color(0xFFE3F2FD), // Light blue background
+      backgroundColor: const Color(0xFFE3F2FD), // Light blue #E3F2FD
       child: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // White circular icon
-                Container(
-                  width: 120,
-                  height: 120,
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: CupertinoColors.black.withOpacity(0.1),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    CupertinoIcons.money_dollar_circle_fill,
-                    size: 70,
-                    color: AppColors.primary,
-                  ),
-                ),
-                const SizedBox(height: 40),
-                
-                // Title
-                const Text(
-                  'Set up your bank balance',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                
-                // Description
-                const Text(
-                  'Set up your bank balance so Undiyal knows how much you\'re really working with.',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: AppColors.textSecondary,
-                    height: 1.5,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 48),
-                
-                // Setup Button
-                SizedBox(
-                  width: double.infinity,
-                  child: CupertinoButton(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(16),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        CupertinoPageRoute(
-                          builder: (context) => BankBalanceSetupScreen(
-                            onComplete: () {
-                              // Navigate back and the auth gate will handle showing real home
-                              Navigator.of(context).pop();
-                            },
-                            onSkip: null, // No skip option - must complete
-                          ),
+        child: Column(
+          children: [
+            // Header: White circular icon near notifications area
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: CupertinoColors.black.withOpacity(0.1),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
                         ),
-                      );
-                    },
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      ],
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.money_dollar_circle_fill,
+                      color: AppColors.primary,
+                      size: 24,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Centered content card
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(32),
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: CupertinoColors.black.withOpacity(0.08),
+                          blurRadius: 24,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
+                        // Title (bold, large)
                         const Text(
-                          'Set it up',
+                          'Set up your bank balance',
                           style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: CupertinoColors.white,
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
                           ),
+                          textAlign: TextAlign.center,
                         ),
-                        const SizedBox(width: 8),
-                        const Icon(
-                          CupertinoIcons.arrow_right,
-                          color: CupertinoColors.white,
-                          size: 20,
+                        const SizedBox(height: 16),
+                        // Subtitle
+                        const Text(
+                          'Set up your bank balance so Undiyal knows how much you\'re really working with.',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: AppColors.textSecondary,
+                            height: 1.5,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 32),
+                        // Primary Button
+                        SizedBox(
+                          width: double.infinity,
+                          child: CupertinoButton(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(12),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            onPressed: () async {
+                              await Navigator.of(context).push(
+                                CupertinoPageRoute(
+                                  builder: (context) => BankBalanceSetupScreen(
+                                    onComplete: () => Navigator.of(context).pop(),
+                                    onSkip: null,
+                                  ),
+                                ),
+                              );
+                              onReturnFromSetup?.call();
+                            },
+                            child: const Text(
+                              'Set it up',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                color: CupertinoColors.white,
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );

@@ -9,6 +9,7 @@ import 'notification_service.dart';
 import 'home_widget_service.dart';
 import 'expense_service.dart';
 import 'balance_sms_parser.dart';
+import 'sms_parser_utils.dart';
 import '../utils/globals.dart';
 
 /// Service for automatically detecting expenses from SMS messages
@@ -60,18 +61,19 @@ class SmsExpenseService {
 
 
 
-  /// DEMO: Read and parse SMS messages for expense detection
-  /// Returns list of detected transactions
+  /// Read and parse SMS messages for expense detection.
+  /// [suppressNotifications] - when true (e.g. during init/login), no notifications are shown.
   static Future<List<Transaction>> detectExpensesFromSms({
     int? limit = 50,
     Duration? since,
+    bool suppressNotifications = false,
   }) async {
     debugPrint('=== SMS EXPENSE DETECTION STARTED ===');
     
     // 1. Check permissions
     if (!await hasSmsPermission()) {
       debugPrint('SMS permission not granted');
-      // For demo, try to request it if not granted
+      // Try to request permission if not granted
       if (!await requestSmsPermission()) {
         debugPrint('SMS permission denied - aborting detection');
         return [];
@@ -154,27 +156,26 @@ class SmsExpenseService {
         String? refNumber = parsedData['reference'];
         String paymentMethod = parsedData['paymentMethod'];
 
-        // LOW CONFIDENCE / UNKNOWN MERCHANT CHECK
-        if (merchantName == 'Unknown Merchant' || merchantName.isEmpty) {
-           debugPrint('⚠ Low confidence transaction detected - triggering notification');
-           await NotificationService.showExpenseNotification(
-             amount: amount,
-             date: message.date ?? DateTime.now(),
-           );
-           // Mark as processed so we don't notify again
-           await _markSmsAsProcessed(message.id.toString());
-           skippedCount++;
-           continue; // Do NOT save automatically
+        // Unknown merchant: save with "Unknown" and trigger notification
+        final isUnknownMerchant = merchantName == 'Unknown' || merchantName.isEmpty;
+        if (isUnknownMerchant) {
+          merchantName = 'Unknown';
+          debugPrint('⚠ Unknown merchant - saving transaction and triggering notification');
+          if (!suppressNotifications) {
+            await NotificationService.showUnknownMerchantNotification();
+          }
+          // Do NOT skip - we save the transaction with "Unknown"
         }
 
-        // 6. Check for duplicates (Prevent duplicates in storage)
+        // 6. Check for duplicates: transaction ID, ref number, or timestamp + amount
+        final smsDate = message.date ?? DateTime.now();
         final isDuplicate = existingTransactions.any((tx) {
-           if (refNumber != null && tx.referenceNumber == refNumber) return true;
-           // Fuzzy match: same amount, same merchant, same day
-           final sameDay = tx.date.year == (message.date?.year ?? 0) &&
-                           tx.date.month == (message.date?.month ?? 0) &&
-                           tx.date.day == (message.date?.day ?? 0);
-           return tx.amount == amount && tx.merchant == merchantName && sameDay; 
+          if (refNumber != null && tx.referenceNumber == refNumber) return true;
+          final sameDay = tx.date.year == smsDate.year &&
+              tx.date.month == smsDate.month && tx.date.day == smsDate.day;
+          return tx.amount == amount &&
+              tx.merchant == merchantName &&
+              sameDay;
         });
 
         if (isDuplicate) {
@@ -184,7 +185,8 @@ class SmsExpenseService {
           continue; 
         }
 
-        // 5. Populate transaction fields
+        // 5. Populate transaction fields (use extracted date from SMS if available)
+        final txDate = parsedData['date'] as DateTime? ?? message.date ?? DateTime.now();
         final transaction = Transaction(
           id: _generateTransactionId(),
           amount: amount,
@@ -192,13 +194,28 @@ class SmsExpenseService {
           category: categorizeExpense(merchantName, amount)['category'],
           paymentMethod: paymentMethod,
           isAutoDetected: true,
-          date: message.date ?? DateTime.now(),
+          date: txDate,
           referenceNumber: refNumber,
           confidenceScore: 1.0,
           type: parsedData['type'] ?? 'expense',
         );
 
         debugPrint('✓ Auto-detected transaction: ${transaction.merchant} - ₹${transaction.amount} (${transaction.type})');
+
+        // Extract and store available balance if present in same SMS
+        final extractedBalance = SmsParserUtils.extractBalance(body);
+        if (extractedBalance != null) {
+          debugPrint('✓ Balance found in SMS: Rs.$extractedBalance - updating storage');
+          await BalanceSmsParser.storeBalance('Unknown', extractedBalance);
+        }
+
+        // Show notification for new valid transaction (only when not initializing)
+        if (!suppressNotifications && !isUnknownMerchant) {
+          await NotificationService.showExpenseNotification(
+            amount: amount,
+            date: message.date ?? DateTime.now(),
+          );
+        }
 
         // Add to collection instead of returning immediately
         detectedTransactions.add(transaction);
@@ -225,7 +242,7 @@ class SmsExpenseService {
         final now = DateTime.now();
         final difference = now.difference(smsDate);
         
-        if (difference.inMinutes <= 5) {
+        if (difference.inMinutes <= 5 && !suppressNotifications) {
           debugPrint('Showing notification for recent balance SMS');
           await NotificationService.showBalanceUpdateNotification(
             bank: bank,
@@ -274,194 +291,65 @@ class SmsExpenseService {
     }
   }
 
-  /// Parse SMS message to extract expense information
-  /// Returns map with amount, merchant, date, type, reference, paymentMethod
-  /// Returns null if SMS is not a transactional expense
+  /// Parse SMS message to extract expense information.
+  /// Returns map with amount, merchant, date, type, reference, paymentMethod.
+  /// Returns null if SMS is not a transactional expense.
   static Map<String, dynamic>? parseSmsForExpense(String smsBody) {
     debugPrint('Parsing SMS: ${smsBody.take(150)}...');
-    
-    // 1. NORMALIZE UNICODE CHARACTERS TO ASCII
-    // Bank of Baroda and others sometimes use specialized fonts
-    String body = smsBody.toLowerCase().trim();
-    body = body.replaceAll('𝖣𝗋', 'dr')
-               .replaceAll('𝖿𝗋𝗈𝗆', 'from')
-               .replaceAll('𝖺𝗇𝖽', 'and')
-               .replaceAll('𝖢𝗋', 'cr')
-               .replaceAll('𝗍𝗈', 'to');
 
-    debugPrint('Normalized body: ${body.take(150)}...');
+    // 1. Normalize unicode (Bank of Baroda etc. use specialized fonts)
+    String body = smsBody.replaceAll('𝖣𝗋', 'dr')
+        .replaceAll('𝖿𝗋𝗈𝗆', 'from')
+        .replaceAll('𝖺𝗇𝖽', 'and')
+        .replaceAll('𝖢𝗋', 'cr')
+        .replaceAll('𝗍𝗈', 'to');
+    final bodyLower = body.toLowerCase().trim();
 
-    // Check if SMS contains transaction keywords
-    final hasTransactionKeyword = _transactionKeywords.any((keyword) => body.contains(keyword));
-    debugPrint('Has transaction keyword: $hasTransactionKeyword');
-    if (!hasTransactionKeyword) {
-      return null;
-    }
+    if (!_transactionKeywords.any((k) => bodyLower.contains(k))) return null;
 
-    // Check if SMS should be ignored (OTP, promotional, credit)
-    final shouldIgnore = _ignoreKeywords.any((keyword) => body.contains(keyword));
-    debugPrint('Should ignore based on keywords: $shouldIgnore');
-    if (shouldIgnore) {
-      // Logic for "Cr." in the user's SMS:
-      // "Dr. from ... and Cr. to ..." -> This IS a debit for the user.
-      // But standard "Cr." usually means money coming IN.
-      // We must be careful. The user's pattern is explicit: "Dr. from A/C...".
-      // So if it contains "dr. from", it's likely an expense, identifying it as a debit
-      if (!body.contains('dr. from') && !body.contains('debited')) {
-         if (body.contains('cr') || body.contains('credit') || body.contains('credited')) {
-           debugPrint('Ignoring credit message without debit pattern');
-           return null;
-         }
+    if (_ignoreKeywords.any((k) => bodyLower.contains(k))) {
+      if (!bodyLower.contains('dr. from') && !bodyLower.contains('debited') &&
+          (bodyLower.contains('cr') || bodyLower.contains('credit') ||
+              bodyLower.contains('credited'))) {
+        return null;
       }
     }
 
-    // Extract amount using regex patterns
-    double? amount;
-    String? amountStr;
-    
-    // Pattern: "Rs.300.00" or "Rs 105.00" or "₹105.00"
-    final pattern1 = RegExp(r'(?:rs\.?|inr|₹)\s*(\d+(?:\.\d{2})?)', caseSensitive: false);
-    final match1 = pattern1.firstMatch(body);
-    if (match1 != null) {
-      amountStr = match1.group(1);
-      amount = double.tryParse(amountStr ?? '');
-    }
+    // 2. Extract amount (modular regex)
+    final amount = SmsParserUtils.extractAmount(body);
+    if (amount == null || amount <= 0) return null;
 
-    debugPrint('Extracted amount: $amount from pattern: $amountStr');
-    if (amount == null || amount <= 0) {
-      debugPrint('No valid amount found, aborting parse');
-      return null; // No valid amount found
-    }
-
-    // Determine transaction type (debit/credit)
+    // 3. Transaction type (debit/credit)
     String transactionType = 'expense';
     String? creditSource;
-    
-    // User's specific format "Dr. from" is explicitly a debit/expense
-    if (body.contains('dr. from') || body.contains('debited') || body.contains('paid')) {
+    if (bodyLower.contains('dr. from') ||
+        bodyLower.contains('debited') ||
+        bodyLower.contains('paid') ||
+        bodyLower.contains('spent') ||
+        bodyLower.contains('deducted')) {
       transactionType = 'expense';
-      debugPrint('Identified as expense/debit transaction');
-    } else if (body.contains('cr') || body.contains('credit') || body.contains('credited') || body.contains('received')) {
-       // Check if it's a legitimate credit (money received)
-       if (!body.contains('and cr. to')) { // "and Cr. to" implies destination of debit, not a credit
-          transactionType = 'credit';
-          debugPrint('Identified as credit transaction');
-          
-          // Try to extract source for credits
-          final creditFromPattern = RegExp(r'(?:from|credited by|received from)\s+([a-zA-Z0-9\.@]+)', caseSensitive: false);
-          final creditMatch = creditFromPattern.firstMatch(body);
-          if (creditMatch != null) {
-            creditSource = creditMatch.group(1);
-            debugPrint('Credit source: $creditSource');
-          }
-       }
+    } else if (!bodyLower.contains('and cr. to') &&
+        (bodyLower.contains('credited') || bodyLower.contains('received'))) {
+      transactionType = 'credit';
+      final m = RegExp(r'(?:from|credited by|received from)\s+([a-zA-Z0-9\.@]+)',
+              caseSensitive: false)
+          .firstMatch(bodyLower);
+      creditSource = m?.group(1);
     }
 
-    // Extract merchant/UPI ID
-    String merchant = 'Unknown Merchant';
-    
-    // Pattern for user's SMS: "and Cr. to <merchant>."
-    // e.g. "and Cr. to dharini1463@okicici." or "and Cr. to zepto.payu@axisbank."
-    final crToPattern = RegExp(r'cr\.\s*to\s+([^\s]+)', caseSensitive: false);
-    final crToMatch = crToPattern.firstMatch(body);
-    
-    debugPrint('Cr. to pattern match: ${crToMatch?.group(1)}');
-    
-    // For credit transactions, use the source as merchant
-    if (transactionType == 'credit' && creditSource != null) {
-      merchant = creditSource;
-      debugPrint('Using credit source as merchant: $merchant');
-    } else if (crToMatch != null) {
-      String rawMerchant = crToMatch.group(1) ?? '';
-      debugPrint('Raw merchant from Cr. to pattern: $rawMerchant');
-      // Clean up trailing dots or generic text
-      if (rawMerchant.endsWith('.')) rawMerchant = rawMerchant.substring(0, rawMerchant.length - 1);
-      
-      // If it looks like a UPI ID (contains @), try to make it readable
-      if (rawMerchant.contains('@')) {
-         final parts = rawMerchant.split('@');
-         if (parts.isNotEmpty) {
-           String namePart = parts[0];
-           // Heuristic: If it has dots like "zepto.payu", take the first part
-           if (namePart.contains('.')) {
-              namePart = namePart.split('.')[0];
-           }
-           // Remove numbers if it looks like a phone number UPI (9361...)
-           if (RegExp(r'^\d+$').hasMatch(namePart)) {
-             merchant = 'UPI Transfer'; // fallback for raw phone numbers
-           } else {
-             merchant = namePart; // Use the name part (e.g., "zepto", "dharini")
-           }
-         }
-      } else {
-        merchant = rawMerchant;
-      }
-      debugPrint('Processed merchant name: $merchant');
-    } else {
-        // Fallback patterns
-        debugPrint('Trying fallback merchant patterns...');
-        
-        // Pattern 1: UPI ID
-        final upiPattern = RegExp(r'(\w+(?:\.\w+)*@\w+)', caseSensitive: false);
-        final upiMatch = upiPattern.firstMatch(body);
-        if (upiMatch != null) {
-           merchant = 'UPI Payment'; // Generic if we cant parse name
-           debugPrint('Found UPI ID, using generic merchant name');
-        }
+    // 4. Extract merchant (modular regex, fallback to "Unknown")
+    String merchant = SmsParserUtils.extractMerchant(body) ??
+        (transactionType == 'credit' && creditSource != null
+            ? SmsParserUtils.capitalize(creditSource.split('@').first)
+            : null) ??
+        'Unknown';
 
-        // Pattern 3: Common merchant names
-        final merchantKeywords = [
-          'amazon', 'flipkart', 'zomato', 'swiggy', 'uber', 'ola', 'rapido',
-          'paytm', 'phonepe', 'gpay', 'airtel', 'jio', 'vi', 'vodafone', 'zepto', 'blinkit'
-        ];
-        for (var keyword in merchantKeywords) {
-          if (body.contains(keyword)) {
-            merchant = keyword.substring(0, 1).toUpperCase() + keyword.substring(1);
-            debugPrint('Found merchant keyword: $keyword');
-            break;
-          }
-        }
-    }
+    // 5. Extract mode, reference, date/time
+    final paymentMethod = SmsParserUtils.extractMode(body);
+    final referenceNumber = SmsParserUtils.extractReference(body);
+    final transactionDate = SmsParserUtils.extractDateTime(body) ?? DateTime.now();
 
-    // Capitalize first letter
-    if (merchant != 'Unknown Merchant' && merchant.isNotEmpty) {
-       merchant = merchant[0].toUpperCase() + merchant.substring(1);
-    }
-
-    // Extract reference information
-    String? referenceNumber;
-    final refPattern = RegExp(r'(?:ref|reference|txn|transaction)[:\s]*([A-Z0-9]{6,})', caseSensitive: false);
-    final refMatch = refPattern.firstMatch(body);
-    if (refMatch != null) {
-      referenceNumber = refMatch.group(1);
-      debugPrint('Found reference number: $referenceNumber');
-    }
-    
-    // Extract Date from SMS content if available: (2026:01:29 08:17:19)
-    DateTime transactionDate = DateTime.now();
-    final datePattern = RegExp(r'\((\d{4}:\d{2}:\d{2}\s+\d{2}:\d{2}:\d{2})\)');
-    final dateMatch = datePattern.firstMatch(smsBody); // Use original body for case/format
-    if (dateMatch != null) {
-      try {
-        final dateStr = dateMatch.group(1)?.replaceAll(':', '-'); // 2026-01-29 08-17-19
-        // Fix time part back to colons: 2026-01-29 08:17:19
-        if (dateStr != null) {
-           final parts = dateStr.split(' ');
-           if (parts.length == 2) {
-             final timePart = parts[1].replaceAll('-', ':');
-             transactionDate = DateTime.parse('${parts[0]} $timePart');
-             debugPrint('Parsed transaction date: $transactionDate');
-           }
-        }
-      } catch (e) {
-        debugPrint('Error parsing date from SMS: $e');
-      }
-    }
-
-    String paymentMethod = 'UPI'; // Default for these bank alerts
-    if (body.contains('card') || body.contains('debit card')) paymentMethod = 'Card';
-
-    final result = {
+    return {
       'amount': amount,
       'merchant': merchant,
       'date': transactionDate,
@@ -469,9 +357,6 @@ class SmsExpenseService {
       'reference': referenceNumber,
       'paymentMethod': paymentMethod,
     };
-
-    debugPrint('Final parsed result: $result');
-    return result;
   }
 
   /// AI-style expense categorization using rule-based + heuristic logic
