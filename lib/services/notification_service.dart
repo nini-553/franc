@@ -124,6 +124,29 @@ class NotificationService {
     );
   }
 
+  /// Show notification for balance update (setup complete)
+  static Future<void> showBalanceUpdateNotification({
+    required String bank,
+    required double balance,
+  }) async {
+    await _notificationsPlugin.show(
+      DateTime.now().millisecond,
+      '🎉 Balance Added Successfully!',
+      'Your $bank balance of ₹${balance.toStringAsFixed(2)} has been added to Undiyal',
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channelId,
+          _channelName,
+          channelDescription: _channelDesc,
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+        ),
+      ),
+      payload: jsonEncode({'type': 'balance_setup', 'bank': bank, 'balance': balance}),
+    );
+  }
+
   /// Handle notification tap
   static void _onNotificationTapped(NotificationResponse response) {
     if (response.payload != null) {

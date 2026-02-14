@@ -175,6 +175,9 @@ class BalanceSmsParser {
     await prefs.setString('bank_balance_last_bank', bank);
     await prefs.setInt('bank_balance_timestamp', DateTime.now().millisecondsSinceEpoch);
     
+    // Mark bank setup as completed
+    await prefs.setBool('has_completed_bank_setup', true);
+    
     // Notify listeners about the new balance
     _balanceUpdateController.add({
       'bank': bank,

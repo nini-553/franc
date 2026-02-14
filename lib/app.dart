@@ -1,5 +1,5 @@
 import 'package:flutter/cupertino.dart';
-import 'screens/auth/auth_gate.dart';
+import 'screens/launch/launch_screen.dart';
 import 'theme/app_colors.dart';
 import 'utils/globals.dart';
 
@@ -20,7 +20,7 @@ class UndiyalApp extends StatelessWidget {
         ),
       ),
       navigatorKey: navigatorKey,
-      home: const AuthGate(),
+      home: const LaunchScreen(),
       debugShowCheckedModeBanner: false,
     );
   }

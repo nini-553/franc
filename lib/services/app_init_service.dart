@@ -33,10 +33,8 @@ class AppInitService {
       await NotificationService.initialize();
       debugPrint('Notification service initialized');
 
-      // Request SMS permission
-      final smsPermissionGranted =
-          await SmsExpenseService.requestSmsPermission();
-      debugPrint('SMS permission granted: $smsPermissionGranted');
+      // DO NOT request SMS permission here - it will be requested after login/signup
+      debugPrint('App initialization complete (permissions will be requested after auth)');
     } catch (e) {
       debugPrint('Error initializing app services: $e');
     }
@@ -45,14 +43,14 @@ class AppInitService {
   /// Initialize SMS detection after permissions are granted
   static Future<void> initializeSmsDetection() async {
     try {
+      debugPrint('=== INITIALIZING SMS DETECTION ===');
+      
       // Check if SMS permission is granted
       final hasPermission = await SmsExpenseService.hasSmsPermission();
+      debugPrint('SMS permission status: $hasPermission');
 
       if (hasPermission) {
         debugPrint('SMS permission granted, detecting expenses...');
-
-        // DEBUG: Run test parsing first
-        await SmsExpenseService.debugTestSmsParsing();
 
         // Calculate messages from current month for comprehensive analysis
         final now = DateTime.now();
@@ -60,6 +58,7 @@ class AppInitService {
         final daysSinceStartOfMonth = now.difference(startOfMonth).inDays;
 
         debugPrint('Analyzing SMS from last $daysSinceStartOfMonth days (current month)');
+        debugPrint('Will scan up to 500 messages');
 
         // Read SMS from current month
         final detectedTransactions =
@@ -69,15 +68,25 @@ class AppInitService {
         );
 
         if (detectedTransactions.isNotEmpty) {
-          debugPrint('Detected & Saved ${detectedTransactions.length} transactions from SMS');
+          debugPrint('✓ Detected & Saved ${detectedTransactions.length} transactions from SMS');
+          for (var tx in detectedTransactions) {
+            debugPrint('  - ${tx.merchant}: ₹${tx.amount} (${tx.category})');
+          }
         } else {
-          debugPrint('No new transactions detected from SMS');
+          debugPrint('⚠ No new transactions detected from SMS');
+          debugPrint('  Possible reasons:');
+          debugPrint('  1. No transaction SMS in inbox');
+          debugPrint('  2. All SMS already processed');
+          debugPrint('  3. SMS format not recognized');
         }
+        
+        debugPrint('=== SMS DETECTION COMPLETE ===');
       } else {
-        debugPrint('SMS permission not granted');
+        debugPrint('✗ SMS permission not granted - cannot detect expenses');
       }
     } catch (e) {
-      debugPrint('Error initializing SMS expense detection: $e');
+      debugPrint('✗ Error initializing SMS expense detection: $e');
+      debugPrint('Stack trace: ${StackTrace.current}');
     }
   }
 

@@ -2,9 +2,12 @@ import 'package:flutter/cupertino.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/auth_service.dart';
 import '../../services/biometric_service.dart';
+import '../../services/app_init_service.dart';
+import 'login_screen.dart';
 import 'signup_screen.dart';
 import '../../navigation/bottom_nav.dart';
 import '../permissions/permission_request_screen.dart';
+import '../home/blocked_home_screen.dart';
 import '../bank/bank_balance_setup_screen.dart';
 import '../settings/sms_notification_settings_screen.dart';
 
@@ -51,32 +54,10 @@ class _AuthGateState extends State<AuthGate> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('has_requested_permissions', true);
     
-    // Navigate to SMS notification settings for real-time detection
-    if (mounted) {
-      Navigator.of(context).pushReplacement(
-        CupertinoPageRoute(
-          builder: (context) => const SmsNotificationSettingsScreen(),
-        ),
-      );
-    }
-  }
-
-  Future<void> _onBankSetupComplete() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('has_completed_bank_setup', true);
+    // Initialize SMS detection after permissions are granted
+    await AppInitService.initializeSmsDetection();
     
-    // Refresh the state to navigate to home
-    setState(() {
-      _initFuture = _checkAuthAndPermissions();
-    });
-  }
-
-  Future<void> _onBankSetupSkip() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('has_completed_bank_setup', true); // Mark as completed so we don't ask again
-    await prefs.setBool('skipped_bank_setup', true); // Remember they skipped
-    
-    // Refresh the state to navigate to home
+    // Refresh the state to show blocked home screen
     setState(() {
       _initFuture = _checkAuthAndPermissions();
     });
@@ -103,9 +84,9 @@ class _AuthGateState extends State<AuthGate> {
         final requiresBiometric = data?['requiresBiometric'] ?? false;
         final biometricEnabled = data?['biometricEnabled'] ?? false;
 
-        // If no user, show sign up
+        // If no user, show login screen (not sign up)
         if (userId == null) {
-          return const SignUpScreen();
+          return const LoginScreen();
         }
 
         // If biometric auth is required, show biometric auth screen
@@ -120,12 +101,9 @@ class _AuthGateState extends State<AuthGate> {
           );
         }
 
-        // If permissions granted but bank setup not completed, show bank setup (optional)
+        // If permissions granted but bank setup not completed, show blocked home screen
         if (!hasCompletedBankSetup) {
-          return BankBalanceSetupScreen(
-            onComplete: _onBankSetupComplete,
-            onSkip: _onBankSetupSkip,
-          );
+          return const BlockedHomeScreen();
         }
 
         // User is authenticated, permissions handled, and bank setup completed

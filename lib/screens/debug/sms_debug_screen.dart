@@ -36,14 +36,7 @@ class _SmsDebugScreenState extends State<SmsDebugScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Test SMS Parsing Button
-              CupertinoButton.filled(
-                onPressed: _isRunning ? null : _testSmsParsing,
-                child: _isRunning
-                    ? const CupertinoActivityIndicator(color: CupertinoColors.white)
-                    : const Text('Test SMS Parsing'),
-              ),
-              const SizedBox(height: 12),
+              // Note: Test SMS Parsing function removed - use real SMS detection instead
               
               // Detect Expenses Button
               CupertinoButton(
@@ -154,28 +147,8 @@ class _SmsDebugScreenState extends State<SmsDebugScreen> {
     );
   }
 
-  Future<void> _testSmsParsing() async {
-    setState(() {
-      _isRunning = true;
-      _debugLog = 'Testing SMS parsing...\n';
-    });
-
-    try {
-      await SmsExpenseService.debugTestSmsParsing();
-      setState(() {
-        _debugLog += '\nSMS parsing test completed!\n';
-        _debugLog += 'Check the console logs for detailed output.\n';
-      });
-    } catch (e) {
-      setState(() {
-        _debugLog += '\nError: $e\n';
-      });
-    } finally {
-      setState(() {
-        _isRunning = false;
-      });
-    }
-  }
+  // Test SMS Parsing function removed - no mock data in production
+  // Use the "Detect Expenses from SMS" button to test with real SMS messages
 
   Future<void> _detectExpenses() async {
     setState(() {

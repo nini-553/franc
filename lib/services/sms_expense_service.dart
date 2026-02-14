@@ -96,6 +96,7 @@ class SmsExpenseService {
       
       // 3. Process messages - COLLECT ALL TRANSACTIONS
       List<Transaction> detectedTransactions = [];
+      List<Map<String, dynamic>> balanceMessages = []; // Collect balance SMS
       int processedCount = 0;
       int skippedCount = 0;
       int balanceCount = 0;
@@ -106,7 +107,7 @@ class SmsExpenseService {
         final body = message.body ?? '';
         final sender = message.address ?? 'Unknown';
         
-        debugPrint('--- Processing SMS ${processedCount}/${messages.length} ---');
+        debugPrint('--- Processing SMS $processedCount/${messages.length} ---');
         debugPrint('Sender: $sender');
         debugPrint('Body (first 100 chars): ${body.take(100)}...');
         
@@ -118,23 +119,21 @@ class SmsExpenseService {
           continue;
         }
         
-        // 4a. Check for BALANCE SMS first
+        // 4a. Check for BALANCE SMS first - COLLECT, don't process yet
         final balanceData = BalanceSmsParser.parseBalanceSms(body, sender);
         if (balanceData != null) {
           debugPrint('✓ Detected balance SMS: ${balanceData['bank']} - Rs.${balanceData['balance']}');
           balanceCount++;
-          await BalanceSmsParser.storeBalance(
-            balanceData['bank'] as String,
-            balanceData['balance'] as double,
-          );
+          
+          // Add to collection with timestamp
+          balanceMessages.add({
+            'bank': balanceData['bank'],
+            'balance': balanceData['balance'],
+            'date': message.date ?? DateTime.now(),
+            'smsId': message.id.toString(),
+          });
+          
           await _markSmsAsProcessed(message.id.toString());
-          
-          // Navigate to home if navigator is available
-          if (navigatorKey.currentState != null) {
-            navigatorKey.currentState!.popUntil((route) => route.isFirst);
-          }
-          
-          // Don't return here, continue to check for expenses in same SMS if any
           continue;
         }
         
@@ -205,6 +204,43 @@ class SmsExpenseService {
         detectedTransactions.add(transaction);
         expenseCount++;
         await _markSmsAsProcessed(message.id.toString());
+      }
+      
+      // 5. Process balance messages - only store and notify for the MOST RECENT one
+      if (balanceMessages.isNotEmpty) {
+        // Sort by date (most recent first)
+        balanceMessages.sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+        
+        final mostRecent = balanceMessages.first;
+        final bank = mostRecent['bank'] as String;
+        final balance = mostRecent['balance'] as double;
+        final smsDate = mostRecent['date'] as DateTime;
+        
+        debugPrint('Processing most recent balance SMS: $bank - Rs.$balance');
+        
+        // Store the balance
+        await BalanceSmsParser.storeBalance(bank, balance);
+        
+        // Only show notification if it's recent (within 5 minutes)
+        final now = DateTime.now();
+        final difference = now.difference(smsDate);
+        
+        if (difference.inMinutes <= 5) {
+          debugPrint('Showing notification for recent balance SMS');
+          await NotificationService.showBalanceUpdateNotification(
+            bank: bank,
+            balance: balance,
+          );
+          
+          // Navigate to home if navigator is available
+          if (navigatorKey.currentState != null) {
+            navigatorKey.currentState!.popUntil((route) => route.isFirst);
+          }
+        } else {
+          debugPrint('Skipping notification for old balance SMS (${difference.inMinutes} minutes old)');
+        }
+        
+        debugPrint('Ignored ${balanceMessages.length - 1} older balance SMS messages');
       }
       
       // 6. Save ALL detected transactions at once
@@ -665,43 +701,9 @@ class SmsExpenseService {
     }
   }
 
-  /// Debug function to test SMS parsing with sample messages
-  static Future<void> debugTestSmsParsing() async {
-    debugPrint('=== SMS PARSING DEBUG TEST ===');
-    
-    final testMessages = [
-      'Dear Customer, Dr. from A/C No. XX7896 dated 26-JAN-2026 and Cr. to zepto.payu@axisbank. for Rs.105.00. Available Balance: Rs.8,500.00.',
-      'Thank you for using UPI. Transaction of Rs.299.00 to swiggy@hdfc successful. Ref no: 1234567890123456',
-      'Rs.150.00 debited from your account for UPI transaction to dharini1463@okicici. Ref: 987654321',
-      'Your account has been credited with Rs.500.00 from John Doe. Available balance: Rs.10000.00',
-      'OTP for your transaction is 123456. Please do not share.',
-      'Avl Bal Rs.8,500.00 as on 26-JAN-2026 18:30:00. Bank of Baroda',
-      // Promotional messages that should be ignored
-      'IND vs USA sorted with Airtel! Watch every match LIVE on JioHotstar, available with pack at Rs. 100 and also get 6GB for 30 days. Recharge now https://i.airtel.in/rc100upg',
-      'New match-ready pack is here! JioHotstar (1 month) + 6GB for 30 days at Rs100. Recharge your Airtel Prepaid now https://i.airtel.in/rc100upg',
-      'Offer for 8122XXX048 ! Recharge now to enjoy 12GB data, Airtel Xstream Play, 30 days and also get JioHotstar Mobile Subscription for 3 months in Rs195. Click i.airtel.in/rc195sil',
-    ];
-
-    for (int i = 0; i < testMessages.length; i++) {
-      debugPrint('\n--- Test Message ${i + 1} ---');
-      debugPrint('Message: ${testMessages[i]}');
-      
-      final result = parseSmsForExpense(testMessages[i]);
-      if (result != null) {
-        debugPrint('✓ Parsed successfully: $result');
-      } else {
-        // Check if it's a balance SMS
-        final balanceResult = BalanceSmsParser.parseBalanceSms(testMessages[i], 'TEST');
-        if (balanceResult != null) {
-          debugPrint('✓ Balance SMS detected: $balanceResult');
-        } else {
-          debugPrint('✗ Not a transaction SMS (correctly ignored)');
-        }
-      }
-    }
-    
-    debugPrint('=== SMS PARSING DEBUG TEST COMPLETED ===');
-  }
+  // DEBUG FUNCTION REMOVED - No mock data in production
+  // If you need to test SMS parsing, use the SMS Debug Screen in the app
+  // or check the test files in test/ folder
 }
 
 
