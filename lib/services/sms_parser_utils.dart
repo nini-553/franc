@@ -133,7 +133,7 @@ class SmsParserUtils {
   static String capitalize(String s) => _capitalize(s);
 
   // --- MODE (UPI/IMPS/ATM/Card/NetBanking) ---
-  static const Map<RegExp, String> _modePatterns = {
+  static final Map<RegExp, String> _modePatterns = {
     RegExp(r'\bupi\b', caseSensitive: false): 'UPI',
     RegExp(r'\bimps\b', caseSensitive: false): 'IMPS',
     RegExp(r'\bneft\b', caseSensitive: false): 'NEFT',
