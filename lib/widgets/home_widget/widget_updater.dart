@@ -84,7 +84,7 @@ class WidgetUpdater {
       'widgetUpdate',
       frequency: const Duration(hours: 1),
       constraints: Constraints(
-        networkType: NetworkType.not_required,
+        networkType: NetworkType.notRequired,
         requiresBatteryNotLow: true,
       ),
     );
