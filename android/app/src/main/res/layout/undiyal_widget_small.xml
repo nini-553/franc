@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:padding="12dp">
+
+    <!-- Main Container -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:background="#1A1A1A"
+        android:padding="12dp">
+
+        <!-- Budget Display -->
+        <TextView
+            android:id="@+id/widget_budget_display"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="177 / 3000 $"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:layout_marginBottom="6dp" />
+
+        <!-- Progress Bar -->
+        <ProgressBar
+            android:id="@+id/widget_progress_small"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:max="100"
+            android:progress="30"
+            android:progressTint="#00FF88"
+            android:progressBackgroundTint="#333333"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Last Expense -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="#00FF88"
+            android:padding="6dp"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:id="@+id/widget_last_icon_small"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:text="🛒"
+                android:textSize="14sp"
+                android:gravity="center" />
+
+            <TextView
+                android:id="@+id/widget_last_amount_small"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="122 $"
+                android:textColor="#000000"
+                android:textSize="12sp"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="end" />
+        </LinearLayout>
+
+        <!-- Add Button -->
+        <ImageButton
+            android:id="@+id/widget_add_button_small"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_gravity="center"
+            android:background="@drawable/fab_background_small"
+            android:src="@drawable/ic_add"
+            android:scaleType="center"
+            android:contentDescription="Add expense" />
+    </LinearLayout>
+</RelativeLayout>

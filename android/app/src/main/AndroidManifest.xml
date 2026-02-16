@@ -53,13 +53,13 @@
         </activity>
         
         <!-- Home Widget Provider -->
-        <receiver android:name=".UndiyalWidgetProvider" android:exported="true">
+        <receiver android:name=".UndiayalWidgetProvider" android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/widget_info_small" />
+                android:resource="@xml/undiyal_widget_info" />
         </receiver>
         
         <!-- SMS Notification Listener Service -->

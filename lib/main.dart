@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'services/app_init_service.dart';
+import 'widgets/home_widget/widget_updater.dart';
 import 'app.dart';
 
 void main() async {
@@ -13,6 +14,9 @@ void main() async {
   
   // Initialize app services (SMS detection, notifications, etc.)
   await AppInitService.initialize();
+  
+  // Initialize home widget
+  await WidgetUpdater.initialize();
 
   runApp(const UndiyalApp());
 } 

@@ -11,6 +11,7 @@ import 'expense_service.dart';
 import 'balance_sms_parser.dart';
 import 'sms_parser_utils.dart';
 import '../utils/globals.dart';
+import '../widgets/home_widget/widget_updater.dart';
 
 /// Service for automatically detecting expenses from SMS messages
 /// Works fully offline, no backend connection required
@@ -264,6 +265,14 @@ class SmsExpenseService {
       if (detectedTransactions.isNotEmpty) {
         await saveTransactions(detectedTransactions);
         debugPrint('✓ Saved ${detectedTransactions.length} transactions from SMS');
+        
+        // Update home widget
+        try {
+          await WidgetUpdater.updateWidget();
+          debugPrint('✓ Home widget updated');
+        } catch (e) {
+          debugPrint('✗ Failed to update widget: $e');
+        }
         
         // Sync to backend
         for (var transaction in detectedTransactions) {

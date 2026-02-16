@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="sms_permission_description">This app reads SMS messages to automatically detect bank transactions and expenses for better financial tracking. Your SMS data is processed locally and never shared.</string>
     <string name="app_name">Undiyal</string>
+    <string name="widget_description">Track your expenses at a glance</string>
 </resources>
