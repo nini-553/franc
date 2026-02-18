@@ -78,6 +78,15 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
 
     return CupertinoPageScaffold(
       backgroundColor: AppColors.background,
+      navigationBar: CupertinoNavigationBar(
+        backgroundColor: AppColors.background,
+        border: null,
+        leading: GestureDetector(
+          onTap: () => Navigator.of(context).pop(),
+          child: const Icon(CupertinoIcons.back, color: AppColors.textPrimary),
+        ),
+        middle: const Text('Transaction History'),
+      ),
       child: SafeArea(
         child: Column(
           children: [
@@ -156,7 +165,7 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
                         border: Border.all(
                           color: isSelected
                               ? AppColors.primary
-                              : const Color(0xFFE0E0E0),
+                              : AppColors.border,
                           width: 1,
                         ),
                       ),

@@ -12,7 +12,7 @@ class BlockedHomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
-      backgroundColor: const Color(0xFFE3F2FD), // Light blue #E3F2FD
+      backgroundColor: AppColors.primaryLight, // Surface Blue
       child: SafeArea(
         child: Column(
           children: [

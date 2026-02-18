@@ -9,9 +9,14 @@ class TermsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
       backgroundColor: AppColors.background,
-      navigationBar: const CupertinoNavigationBar(
-        middle: Text('Terms & Conditions'),
+      navigationBar: CupertinoNavigationBar(
         backgroundColor: AppColors.background,
+        border: null,
+        leading: GestureDetector(
+          onTap: () => Navigator.of(context).pop(),
+          child: const Icon(CupertinoIcons.back, color: AppColors.textPrimary),
+        ),
+        middle: const Text('Terms & Conditions'),
       ),
       child: SafeArea(
         child: Padding(

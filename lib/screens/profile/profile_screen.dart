@@ -8,7 +8,6 @@ import '../../services/auth_service.dart';
 import '../../services/biometric_service.dart';
 import '../../services/settings_service.dart';
 import '../auth/auth_gate.dart';
-import 'subscription_screen.dart';
 import 'terms_screen.dart';
 import 'privacy_screen.dart';
 import 'support_screen.dart';
@@ -227,15 +226,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         title: 'Currency',
                         trailingText: _selectedCurrency,
                         onTap: () => _showCurrencyPicker(context),
-                      ),
-                      _buildDivider(),
-                      _buildMenuItem(
-                        icon: CupertinoIcons.star,
-                        title: 'Subscription',
-                        trailingText: 'Free',
-                        onTap: () => Navigator.of(context).push(
-                          CupertinoPageRoute(builder: (context) => const SubscriptionScreen()),
-                        ),
                         isLast: true,
                       ),
                     ],

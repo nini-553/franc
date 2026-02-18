@@ -12,6 +12,9 @@ import '../../services/app_init_service.dart';
 import 'home_widgets.dart';
 import '../../screens/bank/bank_balance_setup_screen.dart';
 import '../transactions/transaction_detail_screen.dart';
+import '../transactions/transaction_list_screen.dart';
+import '../../widgets/reminders_card.dart';
+import '../reminders/all_reminders_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -46,8 +49,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Refresh balance when app comes back to foreground
-      _refreshBalance();
+      // Refresh balance when app comes back to foreground (non-blocking)
+      _refreshBalanceQuietly();
     }
   }
 
@@ -58,6 +61,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _bankBalance = balanceData['balance'] ?? 0.0;
         _bankName = BalanceSmsParser.getBankFullName(balanceData['bank'] ?? '');
       });
+    }
+  }
+
+  Future<void> _refreshBalanceQuietly() async {
+    try {
+      // Add timeout to prevent hanging
+      final balanceData = await BalanceSmsParser.getLastBalance()
+          .timeout(const Duration(seconds: 2));
+      if (mounted && balanceData != null) {
+        setState(() {
+          _bankBalance = balanceData['balance'] ?? 0.0;
+          _bankName = BalanceSmsParser.getBankFullName(balanceData['bank'] ?? '');
+        });
+      }
+    } catch (e) {
+      // Silently fail - don't block the UI
+      debugPrint('Balance refresh timeout or error: $e');
     }
   }
 
@@ -77,21 +97,33 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     // 1. Load stored transactions first (fast)
     final transactions = await TransactionStorageService.getAllTransactions();
     
-    // 2. Load bank balance from SMS detection
-    final balanceData = await BalanceSmsParser.getLastBalance();
-    
-    if (mounted) {
-      setState(() {
-        _transactions = transactions;
-        if (balanceData != null) {
-          _bankBalance = balanceData['balance'] ?? 0.0;
-          _bankName = BalanceSmsParser.getBankFullName(balanceData['bank'] ?? '');
-        }
-        _isLoading = false;
-      });
+    // 2. Load bank balance from SMS detection with timeout
+    try {
+      final balanceData = await BalanceSmsParser.getLastBalance()
+          .timeout(const Duration(seconds: 3));
+      
+      if (mounted) {
+        setState(() {
+          _transactions = transactions;
+          if (balanceData != null) {
+            _bankBalance = balanceData['balance'] ?? 0.0;
+            _bankName = BalanceSmsParser.getBankFullName(balanceData['bank'] ?? '');
+          }
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      // Don't let SMS parsing block the UI
+      debugPrint('SMS balance loading timeout: $e');
+      if (mounted) {
+        setState(() {
+          _transactions = transactions;
+          _isLoading = false;
+        });
+      }
     }
 
-    // 2. Schedule SMS scan for after the frame builds
+    // 3. Schedule SMS scan for after the frame builds (background)
     // This prevents the UI from freezing during initial render
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _runBackgroundSmsScan();
@@ -99,16 +131,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _runBackgroundSmsScan() async {
-    // Check permission first without requesting to minimize disruption
-    // Only request if we are sure we want to (or let AppInitService handle it gracefully)
-    await AppInitService.initialize();
-    
-    // Refresh to show new transactions
-    if (mounted) {
-      final updatedTransactions = await TransactionStorageService.getAllTransactions();
-      setState(() {
-        _transactions = updatedTransactions;
-      });
+    try {
+      // Check permission first without requesting to minimize disruption
+      // Only request if we are sure we want to (or let AppInitService handle it gracefully)
+      await AppInitService.initialize()
+          .timeout(const Duration(seconds: 5));
+      
+      // Refresh to show new transactions
+      if (mounted) {
+        final updatedTransactions = await TransactionStorageService.getAllTransactions();
+        setState(() {
+          _transactions = updatedTransactions;
+        });
+      }
+    } catch (e) {
+      // Silently fail background SMS scan
+      debugPrint('Background SMS scan timeout: $e');
     }
   }
 
@@ -191,7 +229,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           ),
                           GestureDetector(
                             onTap: () {
-                              // Navigate to notifications
+                              Navigator.of(context).push(
+                                CupertinoPageRoute(
+                                  builder: (context) => const AllRemindersScreen(),
+                                ),
+                              );
                             },
                             child: Container(
                               width: 44,
@@ -219,6 +261,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               child: Padding(
                 padding: const EdgeInsets.all(AppConstants.screenPadding),
                 child: BalanceCard(balance: balance, weeklySpent: weeklySpent, bankName: _bankName),
+              ),
+            ),
+
+            // Reminders Card
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.only(bottom: 24),
+                child: RemindersCard(),
               ),
             ),
 
@@ -256,7 +306,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         Text('Recent Transactions', style: AppTextStyles.h3),
                         GestureDetector(
                           onTap: () {
-                            // Navigate to full history (handled by tab bar)
+                            Navigator.of(context).push(
+                              CupertinoPageRoute(
+                                builder: (context) => const TransactionListScreen(),
+                              ),
+                            );
                           },
                           child: Text(
                             'See All',

@@ -175,6 +175,15 @@ class _BankBalanceSetupScreenState extends State<BankBalanceSetupScreen> {
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
       backgroundColor: AppColors.background,
+      navigationBar: CupertinoNavigationBar(
+        backgroundColor: AppColors.background,
+        border: null,
+        leading: GestureDetector(
+          onTap: () => Navigator.of(context).pop(),
+          child: const Icon(CupertinoIcons.back, color: AppColors.textPrimary),
+        ),
+        middle: const Text('Set Up Bank Balance'),
+      ),
       child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),

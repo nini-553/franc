@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import '../../models/savings_models.dart';
 import '../../data/savings_mock_data.dart';
+import '../../services/savings_storage_service.dart';
+import 'create_goal_screen.dart';
+import 'edit_goal_screen.dart';
 
 class SavingsScreen extends StatefulWidget {
   const SavingsScreen({super.key});
@@ -16,9 +19,14 @@ class _SavingsScreenState extends State<SavingsScreen> with TickerProviderStateM
   late Animation<double> _fadeAnimation;
   CategoryBudget? _selectedCategory;
 
+  final SavingsStorageService _storageService = SavingsStorageService();
+  List<SavingsGoal> _goals = [];
+  bool _isLoadingGoals = true;
+
   @override
   void initState() {
     super.initState();
+    _loadGoals();
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
@@ -31,6 +39,16 @@ class _SavingsScreenState extends State<SavingsScreen> with TickerProviderStateM
   void dispose() {
     _fadeController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadGoals() async {
+    setState(() => _isLoadingGoals = true);
+    await Future.delayed(const Duration(milliseconds: 400));
+    final goals = await _storageService.getSavingsGoals();
+    setState(() {
+      _goals = goals;
+      _isLoadingGoals = false;
+    });
   }
 
   String formatCurrency(double amount) {
@@ -88,7 +106,34 @@ class _SavingsScreenState extends State<SavingsScreen> with TickerProviderStateM
     return '';
   }
 
-  @override
+  
+  Future<void> _showDeleteConfirmation(SavingsGoal goal) async {
+    final result = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Delete Goal'),
+        content: Text('Are you sure you want to delete "${goal.name}"? This action cannot be undone.'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      await _storageService.deleteSavingsGoal(goal.id);
+      _loadGoals();
+    }
+  }
+
+@override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
       backgroundColor: const Color(0xFFF4F6F8),
@@ -132,8 +177,6 @@ class _SavingsScreenState extends State<SavingsScreen> with TickerProviderStateM
                   const SizedBox(height: 22),
                   _buildWeeklyCheckinSection(),
                   const SizedBox(height: 22),
-                  _buildQuickActions(),
-                  const SizedBox(height: 30),
                 ]),
               ),
             ),
@@ -294,7 +337,13 @@ class _SavingsScreenState extends State<SavingsScreen> with TickerProviderStateM
               ),
             ),
             GestureDetector(
-              onTap: () {},
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  CupertinoPageRoute(builder: (_) => const CreateGoalScreen()),
+                );
+                await _loadGoals();
+              },
               child: Row(
                 children: [
                   Icon(CupertinoIcons.add, size: 14, color: Colors.blue[600]),
@@ -326,13 +375,13 @@ class _SavingsScreenState extends State<SavingsScreen> with TickerProviderStateM
             ],
           ),
           child: Column(
-            children: savingsGoals.asMap().entries.map((entry) {
+            children: _goals.asMap().entries.map((entry) {
               final index = entry.key;
               final goal = entry.value;
               return Column(
                 children: [
                   _buildGoalCard(goal),
-                  if (index < savingsGoals.length - 1)
+                  if (index < _goals.length - 1)
                     Padding(
                       padding: const EdgeInsets.only(left: 78),
                       child: Container(height: 1, color: const Color(0xFFE2E8F0)),
@@ -349,7 +398,21 @@ class _SavingsScreenState extends State<SavingsScreen> with TickerProviderStateM
   Widget _buildGoalCard(SavingsGoal goal) {
     final percentage = goal.percentage.round();
     
-    return Padding(
+    return GestureDetector(
+      onTap: () async {
+        final result = await Navigator.of(context).push(
+          CupertinoPageRoute(
+            builder: (context) => EditGoalScreen(goal: goal),
+          ),
+        );
+        if (result == true) {
+          _loadGoals();
+        }
+      },
+      onLongPress: () {
+        _showDeleteConfirmation(goal);
+      },
+      child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Row(
         children: [
@@ -440,6 +503,7 @@ class _SavingsScreenState extends State<SavingsScreen> with TickerProviderStateM
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -891,7 +955,13 @@ class _SavingsScreenState extends State<SavingsScreen> with TickerProviderStateM
             children: [
               Expanded(
                 child: GestureDetector(
-                  onTap: () {},
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  CupertinoPageRoute(builder: (_) => const CreateGoalScreen()),
+                );
+                await _loadGoals();
+              },
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     decoration: BoxDecoration(
@@ -913,7 +983,13 @@ class _SavingsScreenState extends State<SavingsScreen> with TickerProviderStateM
               const SizedBox(width: 10),
               Expanded(
                 child: GestureDetector(
-                  onTap: () {},
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  CupertinoPageRoute(builder: (_) => const CreateGoalScreen()),
+                );
+                await _loadGoals();
+              },
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     decoration: BoxDecoration(
@@ -1260,7 +1336,13 @@ class _SavingsScreenState extends State<SavingsScreen> with TickerProviderStateM
       children: [
         Expanded(
           child: GestureDetector(
-            onTap: () {},
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  CupertinoPageRoute(builder: (_) => const CreateGoalScreen()),
+                );
+                await _loadGoals();
+              },
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 14),
               decoration: BoxDecoration(
@@ -1288,7 +1370,13 @@ class _SavingsScreenState extends State<SavingsScreen> with TickerProviderStateM
         const SizedBox(width: 10),
         Expanded(
           child: GestureDetector(
-            onTap: () {},
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  CupertinoPageRoute(builder: (_) => const CreateGoalScreen()),
+                );
+                await _loadGoals();
+              },
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 14),
               decoration: BoxDecoration(

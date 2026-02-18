@@ -20,6 +20,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   double _totalSpent = 0;
   double _monthlyBudget = 5000;
   List<Map<String, dynamic>> _weeklyData = [];
+  List<Map<String, dynamic>> _monthlyData = [];
   Map<String, double> _categoryTotals = {};
   List<String> _insights = [];
 
@@ -40,6 +41,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           
           // Safe List Casting
           _weeklyData = (data['weeklyData'] as List).map((item) => Map<String, dynamic>.from(item)).toList();
+          _monthlyData = (data['monthlyData'] as List).map((item) => Map<String, dynamic>.from(item)).toList();
           
           // Safe Map Casting
           _categoryTotals = Map<String, double>.from(data['categoryTotals']);
@@ -137,7 +139,17 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               const SliverToBoxAdapter(child: SizedBox(height: 24)),
             ],
 
-            // 3. Weekly Activity Chart
+            // 3. Monthly Activity Chart (NEW)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: MonthlyActivityChart(data: _monthlyData),
+              ),
+            ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+
+            // 4. Weekly Activity Chart
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -147,7 +159,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
             const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
-            // 4. Category Breakdown
+            // 5. Category Breakdown
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),

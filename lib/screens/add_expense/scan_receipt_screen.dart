@@ -51,6 +51,18 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
       backgroundColor: AppColors.textPrimary,
+      navigationBar: CupertinoNavigationBar(
+        backgroundColor: AppColors.textPrimary,
+        border: null,
+        leading: GestureDetector(
+          onTap: () => Navigator.of(context).pop(),
+          child: const Icon(CupertinoIcons.back, color: AppColors.cardBackground),
+        ),
+        middle: const Text(
+          'Scan Receipt',
+          style: TextStyle(color: AppColors.cardBackground),
+        ),
+      ),
       child: Stack(
         children: [
           // Camera viewfinder simulation (since we can't embed real camera preview easily without camera package logic in build)

@@ -169,6 +169,151 @@ class BudgetRingCard extends StatelessWidget {
   }
 }
 
+// --- Monthly Activity Chart (NEW) ---
+class MonthlyActivityChart extends StatelessWidget {
+  final List<Map<String, dynamic>> data;
+
+  const MonthlyActivityChart({
+    super.key,
+    required this.data,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (data.isEmpty) return const SizedBox.shrink();
+
+    final maxAmount = data.map((d) => d['amount'] as double).reduce(max);
+    final safeMax = maxAmount > 0 ? maxAmount : 1.0;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: CupertinoColors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.textPrimary.withValues(alpha: 0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Monthly Activity', style: AppTextStyles.h3),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'Last 6 months',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: data.asMap().entries.map((entry) {
+               final index = entry.key;
+               final d = entry.value;
+              return _buildMonthBar(
+                context,
+                label: d['label'] as String,
+                amount: d['amount'] as double,
+                maxAmount: safeMax,
+                isCurrentMonth: d['isCurrentMonth'] as bool? ?? false,
+                index: index,
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMonthBar(BuildContext context, {
+    required String label, 
+    required double amount, 
+    required double maxAmount, 
+    required bool isCurrentMonth, 
+    required int index
+  }) {
+    Color barColor = isCurrentMonth ? AppColors.primary : AppColors.chartInactive;
+
+    return Expanded(
+      child: Column(
+        children: [
+          // Amount label on top
+          TweenAnimationBuilder<double>(
+            tween: Tween<double>(begin: 0, end: 1),
+            duration: Duration(milliseconds: 1500 + (index * 150)),
+            curve: Curves.easeOut,
+            builder: (context, value, _) {
+              return Opacity(
+                opacity: value,
+                child: Text(
+                  amount > 0 ? '₹${(amount / 1000).toStringAsFixed(0)}K' : '₹0',
+                  style: AppTextStyles.caption.copyWith(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: isCurrentMonth ? AppColors.primary : AppColors.textSecondary,
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+          // Bar
+          TweenAnimationBuilder<double>(
+            tween: Tween<double>(begin: 0, end: amount / maxAmount),
+            duration: Duration(milliseconds: 1200 + (index * 100)),
+            curve: Curves.elasticOut,
+            builder: (context, value, _) {
+              return Container(
+                width: 16,
+                height: max(100 * value, 6), // Min height 6 for visibility
+                decoration: BoxDecoration(
+                  color: barColor,
+                  borderRadius: BorderRadius.circular(8),
+                  gradient: isCurrentMonth ? LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      AppColors.primary,
+                      AppColors.primary.withValues(alpha: 0.7),
+                    ],
+                  ) : null,
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          Text(
+            label, 
+            style: AppTextStyles.label.copyWith(
+              color: isCurrentMonth ? AppColors.primary : AppColors.textSecondary,
+              fontWeight: isCurrentMonth ? FontWeight.bold : FontWeight.normal,
+              fontSize: 12,
+            )
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // --- Spending Trend Chart (Refined) ---
 class SpendingTrendChart extends StatelessWidget {
   final List<Map<String, dynamic>> data;

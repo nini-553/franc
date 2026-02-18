@@ -41,6 +41,36 @@ class SavingsGoal {
 
   double get percentage => (savedAmount / targetAmount) * 100;
   double get toGo => targetAmount - savedAmount;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'emoji': emoji,
+      'name': name,
+      'targetAmount': targetAmount,
+      'savedAmount': savedAmount,
+      'targetDate': targetDate,
+      'status': status.toString().split('.').last,
+      'iconBg': iconBg,
+      'iconBorder': iconBorder,
+    };
+  }
+
+  factory SavingsGoal.fromJson(Map<String, dynamic> json) {
+    return SavingsGoal(
+      id: json['id'],
+      emoji: json['emoji'],
+      name: json['name'],
+      targetAmount: json['targetAmount'],
+      savedAmount: json['savedAmount'],
+      targetDate: json['targetDate'],
+      status: GoalStatus.values.firstWhere(
+        (e) => e.toString().split('.').last == json['status'],
+      ),
+      iconBg: json['iconBg'],
+      iconBorder: json['iconBorder'],
+    );
+  }
 }
 
 enum GoalStatus { onTrack, behind, ahead }
