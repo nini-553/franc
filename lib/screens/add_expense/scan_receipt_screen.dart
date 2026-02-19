@@ -68,25 +68,33 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
           // Camera viewfinder simulation (since we can't embed real camera preview easily without camera package logic in build)
           // We will use a placeholder or black background until user taps 'scan' which opens system camera
           Container(
+            width: double.infinity,
+            height: double.infinity,
             color: AppColors.textPrimary,
             child: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   if (!_isScanning) ...[
-                     // Scan guide overlay
-                    Container(
-                      width: 300,
-                      height: 400,
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: AppColors.primary,
-                          width: 3,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Stack(
-                        children: [
+                     // Scan guide overlay - full width/height
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final screenWidth = MediaQuery.of(context).size.width;
+                        final screenHeight = MediaQuery.of(context).size.height;
+                        final guideWidth = screenWidth - 48;
+                        final guideHeight = (screenHeight * 0.7).clamp(400.0, 600.0);
+                        return Container(
+                          width: guideWidth,
+                          height: guideHeight,
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: AppColors.primary,
+                              width: 3,
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Stack(
+                            children: [
                           // Corner indicators
                           Positioned(
                             top: -2,
@@ -143,9 +151,11 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
                                 ),
                               ),
                             ),
+                            ),
+                            ],
                           ),
-                        ],
-                      ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 32),
                     Text(

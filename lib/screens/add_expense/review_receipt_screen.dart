@@ -7,6 +7,8 @@ import '../../utils/constants.dart';
 import '../../widgets/category_chip.dart';
 import '../../models/transaction_model.dart';
 import '../../services/transaction_storage_service.dart';
+import '../../services/receipt_scanning_service.dart';
+import '../../services/sms_expense_service.dart';
 import '../../navigation/bottom_nav.dart';
 import 'dart:math';
 
@@ -37,16 +39,53 @@ class _ReviewReceiptScreenState extends State<ReviewReceiptScreen> {
   }
 
   Future<void> _processReceipt(String path) async {
-    // API REMOVED: Integration with Gemini has been removed.
-    // Users will now manually enter details from the image.
-    // Future integration with local OCR planned.
-    
     if (mounted) {
       setState(() {
-        _isLoading = false;
-        // Pre-fill date to today
-        _selectedDate = DateTime.now();
+        _isLoading = true;
       });
+    }
+
+    try {
+      // Call Gemini API to scan receipt
+      final result = await ReceiptScanningService.scanReceipt(path);
+      
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          
+          if (result != null) {
+            // Pre-fill extracted data
+            if (result['amount'] != null) {
+              _amountController.text = result['amount'].toString();
+            }
+            if (result['merchant'] != null && result['merchant'].toString().isNotEmpty) {
+              _merchantController.text = result['merchant'].toString();
+            }
+            if (result['category'] != null && AppConstants.categories.contains(result['category'])) {
+              _selectedCategory = result['category'].toString();
+            }
+            if (result['date'] != null && result['date'] is DateTime) {
+              _selectedDate = result['date'] as DateTime;
+            } else {
+              _selectedDate = DateTime.now();
+            }
+            if (result['paymentMethod'] != null && AppConstants.paymentMethods.contains(result['paymentMethod'])) {
+              _selectedPaymentMethod = result['paymentMethod'].toString();
+            }
+          } else {
+            // If API fails, just set date to today
+            _selectedDate = DateTime.now();
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error processing receipt: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _selectedDate = DateTime.now();
+        });
+      }
     }
   }
 
@@ -186,37 +225,42 @@ class _ReviewReceiptScreenState extends State<ReviewReceiptScreen> {
 
                     const SizedBox(height: 24),
 
-                    // Receipt preview
-                    Container(
-                      width: double.infinity,
-                      height: 200,
-                      decoration: BoxDecoration(
-                        color: CupertinoColors.systemGrey5,
-                        borderRadius: BorderRadius.circular(16),
-                        image: widget.imagePath != null 
-                          ? DecorationImage(
-                              image: FileImage(File(widget.imagePath!)),
-                              fit: BoxFit.cover,
-                            )
-                          : null,
-                      ),
-                      child: widget.imagePath == null ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              CupertinoIcons.doc_text,
-                              size: 48,
-                              color: AppColors.textSecondary,
+                    // Receipt preview - full width, ~45% of screen height
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final previewHeight = MediaQuery.of(context).size.height * 0.45;
+                        return Container(
+                          width: double.infinity,
+                          height: previewHeight.clamp(220.0, 400.0),
+                          decoration: BoxDecoration(
+                            color: CupertinoColors.systemGrey5,
+                            borderRadius: BorderRadius.circular(16),
+                            image: widget.imagePath != null 
+                              ? DecorationImage(
+                                  image: FileImage(File(widget.imagePath!)),
+                                  fit: BoxFit.cover,
+                                )
+                              : null,
+                          ),
+                          child: widget.imagePath == null ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  CupertinoIcons.doc_text,
+                                  size: 48,
+                                  color: AppColors.textSecondary,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'No Receipt Image',
+                                  style: AppTextStyles.caption,
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'No Receipt Image',
-                              style: AppTextStyles.caption,
-                            ),
-                          ],
-                        ),
-                      ) : null,
+                          ) : null,
+                        );
+                      },
                     ),
 
                     const SizedBox(height: 24),
