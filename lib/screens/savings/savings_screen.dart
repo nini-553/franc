@@ -1,9 +1,17 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'dart:math' as math;
 import '../../models/savings_models.dart';
+import '../../models/transaction_model.dart';
 import '../../data/savings_mock_data.dart';
 import '../../services/savings_storage_service.dart';
+import '../../services/transaction_storage_service.dart';
+import '../../services/settings_service.dart';
+import '../../services/ai_suggestions_service.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
+import '../../utils/constants.dart';
 import 'create_goal_screen.dart';
 import 'edit_goal_screen.dart';
 
@@ -23,10 +31,31 @@ class _SavingsScreenState extends State<SavingsScreen> with TickerProviderStateM
   List<SavingsGoal> _goals = [];
   bool _isLoadingGoals = true;
 
+  double _monthlyBudget = 0;
+  double _totalSpent = 0;
+  double _monthlySavingsTarget = 0;
+  String _currencySymbol = '₹';
+  List<CategoryBudget> _categoryBudgets = [];
+  bool _isLoadingBudget = true;
+  String? _aiSuggestions;
+  bool _aiSuggestionsLoading = true;
+  StreamSubscription<String>? _settingsSubscription;
+
   @override
   void initState() {
     super.initState();
     _loadGoals();
+    _loadBudgetData();
+    _loadAiSuggestions();
+    
+    // Listen for settings changes and refresh
+    _settingsSubscription = SettingsService.onSettingsChange.listen((settingKey) {
+      if (settingKey == 'monthly_budget' || 
+          settingKey == 'monthly_savings_target' || 
+          settingKey == 'category_budgets') {
+        _loadBudgetData();
+      }
+    });
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
@@ -37,6 +66,7 @@ class _SavingsScreenState extends State<SavingsScreen> with TickerProviderStateM
 
   @override
   void dispose() {
+    _settingsSubscription?.cancel();
     _fadeController.dispose();
     super.dispose();
   }
@@ -51,19 +81,115 @@ class _SavingsScreenState extends State<SavingsScreen> with TickerProviderStateM
     });
   }
 
+  Future<void> _loadBudgetData() async {
+    setState(() => _isLoadingBudget = true);
+    final budget = await SettingsService.getMonthlyBudget();
+    final savingsTarget = await SettingsService.getMonthlySavingsTarget();
+    final catBudgets = await SettingsService.getCategoryBudgets();
+    final symbol = await SettingsService.getCurrencySymbol();
+    final transactions = await TransactionStorageService.getAllTransactions();
+    final now = DateTime.now();
+    final thisMonthStart = DateTime(now.year, now.month, 1);
+    double totalSpent = 0;
+    final Map<String, double> spentByCategory = {};
+    for (final tx in transactions) {
+      if (tx.type == 'expense' && tx.date.isAfter(thisMonthStart.subtract(const Duration(days: 1)))) {
+        totalSpent += tx.amount;
+        spentByCategory[tx.category] = (spentByCategory[tx.category] ?? 0) + tx.amount;
+      }
+    }
+    final List<CategoryBudget> list = [];
+    for (final cat in AppConstants.categories) {
+      final limit = catBudgets[cat] ?? 0;
+      if (limit <= 0) continue;
+      final spent = spentByCategory[cat] ?? 0;
+      final remaining = (limit - spent).clamp(0.0, double.infinity);
+      CategoryStatus status = CategoryStatus.onTrack;
+      if (spent > limit) status = CategoryStatus.overspending;
+      else if (spent / limit >= 0.8) status = CategoryStatus.warning;
+      String suggestion = 'Keep tracking to stay within budget.';
+      if (status == CategoryStatus.overspending) {
+        suggestion = 'You\'re over budget. Review recent spending in this category.';
+      } else if (status == CategoryStatus.warning) {
+        suggestion = 'Approaching your limit. Consider reducing spending this month.';
+      }
+      list.add(CategoryBudget(
+        id: cat,
+        emoji: _getCategoryEmoji(cat),
+        name: cat,
+        budgetLimit: limit,
+        spent: spent,
+        remaining: remaining,
+        status: status,
+        suggestion: suggestion,
+      ));
+    }
+    list.sort((a, b) => b.spent.compareTo(a.spent));
+    if (mounted) {
+      setState(() {
+        _monthlyBudget = budget;
+        _totalSpent = totalSpent;
+        _monthlySavingsTarget = savingsTarget;
+        _currencySymbol = symbol;
+        _categoryBudgets = list;
+        _isLoadingBudget = false;
+      });
+    }
+  }
+
+  String _getCategoryEmoji(String category) {
+    switch (category) {
+      case 'Food & Drink': return '🍕';
+      case 'Shopping': return '🛒';
+      case 'Transport': return '🚗';
+      case 'Entertainment': return '🎬';
+      case 'Groceries': return '🥕';
+      case 'Bills': return '📄';
+      case 'Health': return '🏥';
+      case 'Education': return '📚';
+      default: return '📦';
+    }
+  }
+
+  Future<void> _loadAiSuggestions() async {
+    setState(() => _aiSuggestionsLoading = true);
+    final suggestions = await AiSuggestionsService.getSuggestions();
+    if (mounted) {
+      setState(() {
+        _aiSuggestions = suggestions;
+        _aiSuggestionsLoading = false;
+      });
+    }
+  }
+
+  BudgetOverview get _budgetOverview {
+    final remaining = (_monthlyBudget - _totalSpent).clamp(0.0, double.infinity);
+    final percentage = _monthlyBudget > 0 ? ((_totalSpent / _monthlyBudget) * 100).round() : 0;
+    BudgetStatus status = BudgetStatus.onTrack;
+    if (_totalSpent > _monthlyBudget) status = BudgetStatus.overspending;
+    else if (percentage > 75) status = BudgetStatus.slightlyBehind;
+    return BudgetOverview(
+      monthlyBudget: _monthlyBudget,
+      totalSpent: _totalSpent,
+      remaining: remaining,
+      percentage: percentage,
+      status: status,
+    );
+  }
+
   String formatCurrency(double amount) {
     if (amount >= 100000) {
       final lakhs = amount / 100000;
-      return 'Rs ${lakhs % 1 == 0 ? lakhs.toStringAsFixed(0) : lakhs.toStringAsFixed(1)}L';
+      return '$_currencySymbol${lakhs % 1 == 0 ? lakhs.toStringAsFixed(0) : lakhs.toStringAsFixed(1)}L';
     }
     if (amount >= 1000) {
       final k = amount / 1000;
-      return 'Rs ${k % 1 == 0 ? k.toStringAsFixed(0) : k.toStringAsFixed(1)}K';
+      return '$_currencySymbol${k % 1 == 0 ? k.toStringAsFixed(0) : k.toStringAsFixed(1)}K';
     }
-    return 'Rs ${amount.toStringAsFixed(0)}';
+    return '$_currencySymbol${amount.toStringAsFixed(0)}';
   }
 
-  String formatCurrencyFull(double amount) => 'Rs ${amount.toStringAsFixed(0)}';
+  String formatCurrencyFull(double amount) => '$_currencySymbol${amount.toStringAsFixed(0)}';
 
   Color getStatusColor(dynamic status) {
     if (status == BudgetStatus.onTrack || status == GoalStatus.onTrack || 
@@ -144,20 +270,16 @@ class _SavingsScreenState extends State<SavingsScreen> with TickerProviderStateM
             CupertinoSliverNavigationBar(
               backgroundColor: const Color(0xFFF4F6F8),
               border: null,
-              largeTitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Savings'),
-                  Text(
-                    'Your money, under control',
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.normal,
-                    ),
-                  ),
-                ],
-              ),
+              largeTitle: const Text('Savings'),
+            ),
+            CupertinoSliverRefreshControl(
+              onRefresh: () async {
+                await Future.wait([
+                  _loadBudgetData(),
+                  _loadGoals(),
+                  _loadAiSuggestions(),
+                ]);
+              },
             ),
             SliverPadding(
               padding: const EdgeInsets.all(20),
@@ -187,23 +309,45 @@ class _SavingsScreenState extends State<SavingsScreen> with TickerProviderStateM
   }
 
   Widget _buildBudgetOverviewCard() {
-    final overview = budgetOverview;
+    if (_isLoadingBudget) {
+      return Container(
+        height: 160,
+        decoration: BoxDecoration(
+          color: AppColors.cardBackground,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        alignment: Alignment.center,
+        child: const CupertinoActivityIndicator(),
+      );
+    }
+    final overview = _budgetOverview;
     final statusColor = getStatusColor(overview.status);
     final isOverspending = overview.status == BudgetStatus.overspending;
     
     Color progressColor;
     if (isOverspending) {
-      progressColor = const Color(0xFFEF4444);
+      progressColor = AppColors.error;
     } else if (overview.percentage > 75) {
-      progressColor = const Color(0xFFF59E0B);
+      progressColor = AppColors.warning;
     } else {
-      progressColor = const Color(0xFF10B981);
+      progressColor = AppColors.success;
     }
 
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF0F1D3A), Color(0xFF1A3566), Color(0xFF244A8A)],
+          colors: [
+            Color(0xFF0D47A1),
+            Color(0xFF1565C0),
+            Color(0xFF1976D2),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -572,23 +716,32 @@ class _SavingsScreenState extends State<SavingsScreen> with TickerProviderStateM
             ],
           ),
           padding: const EdgeInsets.all(16),
-          child: Column(
-            children: categoryBudgets.asMap().entries.map((entry) {
-              final index = entry.key;
-              final category = entry.value;
-              return Column(
-                children: [
-                  _buildCategoryCard(category),
-                  if (index < categoryBudgets.length - 1)
-                    Container(
-                      height: 1,
-                      color: const Color(0xFFE2E8F0),
-                      margin: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                ],
-              );
-            }).toList(),
-          ),
+          child: _categoryBudgets.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    'Set category budgets in Profile → Savings Settings to see progress here.',
+                    style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+                    textAlign: TextAlign.center,
+                  ),
+                )
+              : Column(
+                  children: _categoryBudgets.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final category = entry.value;
+                    return Column(
+                      children: [
+                        _buildCategoryCard(category),
+                        if (index < _categoryBudgets.length - 1)
+                          Container(
+                            height: 1,
+                            color: AppColors.border,
+                            margin: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                      ],
+                    );
+                  }).toList(),
+                ),
         ),
       ],
     );
@@ -833,8 +986,75 @@ class _SavingsScreenState extends State<SavingsScreen> with TickerProviderStateM
           ],
         ),
         const SizedBox(height: 12),
-        ...smartSuggestions.map((suggestion) => _buildSuggestionCard(suggestion)),
+        if (_aiSuggestionsLoading)
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: AppColors.cardBackground,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.06),
+                  blurRadius: 12,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Center(
+              child: CupertinoActivityIndicator(),
+            ),
+          )
+        else if (_aiSuggestions != null && _aiSuggestions!.isNotEmpty)
+          _buildAiSuggestionsCard(_aiSuggestions!)
+        else
+          ...smartSuggestions.map((suggestion) => _buildSuggestionCard(suggestion)),
       ],
+    );
+  }
+
+  Widget _buildAiSuggestionsCard(String markdown) {
+    // Simple formatting: replace \n with newlines, strip ** for cleaner display
+    final text = markdown.replaceAll(r'\n', '\n').replaceAll('**', '');
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(CupertinoIcons.lightbulb, size: 16, color: Color(0xFFF59E0B)),
+              const SizedBox(width: 8),
+              Text(
+                'AI-powered tips for you',
+                style: AppTextStyles.body.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            text,
+            style: AppTextStyles.body.copyWith(
+              fontSize: 14,
+              color: AppColors.textSecondary,
+              height: 1.6,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

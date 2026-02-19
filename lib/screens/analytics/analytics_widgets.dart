@@ -22,10 +22,12 @@ class InsightCard extends StatelessWidget {
       duration: Duration(milliseconds: 600 + (index * 200)),
       curve: Curves.easeOutBack,
       builder: (context, value, child) {
+        // Clamp opacity to valid range
+        final safeOpacity = value.clamp(0.0, 1.0);
         return Transform.translate(
-          offset: Offset(0, 20 * (1 - value)),
+          offset: Offset(0, 20 * (1 - safeOpacity)),
           child: Opacity(
-            opacity: value,
+            opacity: safeOpacity,
             child: child,
           ),
         );
@@ -83,9 +85,13 @@ class BudgetRingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (budget == 0) return const SizedBox.shrink(); // Prevent division by zero
+    if (budget <= 0) return const SizedBox.shrink(); // Prevent division by zero
     
+    // Clamp progress to valid range and handle edge cases
     final progress = (spent / budget).clamp(0.0, 1.0);
+    if (progress.isNaN || progress.isInfinite) {
+      return const SizedBox.shrink();
+    }
 
     String emoji;
     if (progress < 0.5) {
@@ -139,12 +145,14 @@ class BudgetRingCard extends StatelessWidget {
                         duration: const Duration(seconds: 2),
                         curve: Curves.easeOutExpo,
                         builder: (context, value, _) {
+                          // Clamp value to valid range for CircularProgressIndicator
+                          final safeValue = value.clamp(0.0, 1.0);
                           Color color = const Color(0xFF34D399); // Mint Green
-                          if (value > 0.6) color = const Color(0xFFFBBF24); // Amber
-                          if (value > 0.9) color = const Color(0xFFF87171); // Red
+                          if (safeValue > 0.6) color = const Color(0xFFFBBF24); // Amber
+                          if (safeValue > 0.9) color = const Color(0xFFF87171); // Red
                           
                           return CircularProgressIndicator(
-                            value: value,
+                            value: safeValue,
                             color: color,
                             strokeWidth: 10,
                             strokeCap: StrokeCap.round,
@@ -261,8 +269,10 @@ class MonthlyActivityChart extends StatelessWidget {
             duration: Duration(milliseconds: 1500 + (index * 150)),
             curve: Curves.easeOut,
             builder: (context, value, _) {
+              // Clamp opacity to valid range
+              final safeOpacity = value.clamp(0.0, 1.0);
               return Opacity(
-                opacity: value,
+                opacity: safeOpacity,
                 child: Text(
                   amount > 0 ? '₹${(amount / 1000).toStringAsFixed(0)}K' : '₹0',
                   style: AppTextStyles.caption.copyWith(

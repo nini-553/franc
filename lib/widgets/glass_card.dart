@@ -22,6 +22,10 @@ class GlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Clamp opacity to valid range (0.0 to 1.0)
+    final safeOpacity = opacity.clamp(0.0, 1.0);
+    final safeBorderOpacity = 0.2.clamp(0.0, 1.0);
+    
     return ClipRRect(
       borderRadius: borderRadius ?? BorderRadius.circular(24),
       child: BackdropFilter(
@@ -29,10 +33,10 @@ class GlassCard extends StatelessWidget {
         child: Container(
           padding: padding,
           decoration: BoxDecoration(
-            color: (color ?? CupertinoColors.white).withOpacity(opacity),
+            color: (color ?? CupertinoColors.white).withOpacity(safeOpacity),
             borderRadius: borderRadius ?? BorderRadius.circular(24),
             border: Border.all(
-              color: CupertinoColors.white.withOpacity(0.2),
+              color: CupertinoColors.white.withOpacity(safeBorderOpacity),
               width: 1.5,
             ),
           ),

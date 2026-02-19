@@ -11,7 +11,9 @@ import '../auth/auth_gate.dart';
 import 'terms_screen.dart';
 import 'privacy_screen.dart';
 import 'support_screen.dart';
+import 'savings_settings_screen.dart';
 import '../settings/sms_notification_settings_screen.dart';
+import 'dart:async';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -27,6 +29,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   // Data (initial values overwritten by _loadData from real storage)
   double _monthlyBudget = 0;
+  double _monthlySavingsTarget = 0;
   String _selectedCurrency = '₹ INR';
   bool _notificationsEnabled = true;
   bool _biometricEnabled = false;
@@ -36,6 +39,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _userName = '';
   String _userEmail = '';
   String? _profileImagePath;
+  StreamSubscription<String>? _settingsSubscription;
 
   final List<String> _currencies = ['₹ INR', '\$ USD', '€ EUR', '£ GBP', '¥ JPY'];
 
@@ -44,6 +48,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.initState();
     _loadData();
     _checkBiometricAvailability();
+    
+    // Listen for settings changes and refresh
+    _settingsSubscription = SettingsService.onSettingsChange.listen((settingKey) {
+      if (settingKey == 'monthly_budget' || 
+          settingKey == 'monthly_savings_target') {
+        _loadData();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _settingsSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _checkBiometricAvailability() async {
@@ -59,6 +77,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadData() async {
     final budget = await SettingsService.getMonthlyBudget();
+    final savingsTarget = await SettingsService.getMonthlySavingsTarget();
     final currency = await SettingsService.getCurrency();
     final profile = await ProfileService.getProfile();
     final prefs = await ProfileService.getPreferences();
@@ -66,6 +85,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (mounted) {
       setState(() {
         _monthlyBudget = budget;
+        _monthlySavingsTarget = savingsTarget;
         _selectedCurrency = currency;
         _userName = (profile['name'] as String?) ?? '';
         _userEmail = (profile['email'] as String?) ?? '';
@@ -226,6 +246,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         title: 'Currency',
                         trailingText: _selectedCurrency,
                         onTap: () => _showCurrencyPicker(context),
+                      ),
+                      _buildDivider(),
+                      _buildMenuItem(
+                        icon: CupertinoIcons.tray_full,
+                        title: 'Savings Settings',
+                        trailingText: _monthlySavingsTarget > 0 ? '₹${_monthlySavingsTarget.toStringAsFixed(0)}' : null,
+                        onTap: () async {
+                          await Navigator.of(context).push(
+                            CupertinoPageRoute(builder: (context) => const SavingsSettingsScreen()),
+                          );
+                          // Reload data when returning from Savings Settings
+                          _loadData();
+                        },
                         isLast: true,
                       ),
                     ],

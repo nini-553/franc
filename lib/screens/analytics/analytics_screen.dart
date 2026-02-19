@@ -1,4 +1,5 @@
 
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
@@ -23,11 +24,25 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   List<Map<String, dynamic>> _monthlyData = [];
   Map<String, double> _categoryTotals = {};
   List<String> _insights = [];
+  StreamSubscription<String>? _settingsSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    
+    // Listen for settings changes and refresh
+    _settingsSubscription = SettingsService.onSettingsChange.listen((settingKey) {
+      if (settingKey == 'monthly_budget') {
+        _loadData();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _settingsSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -202,10 +217,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                         duration: Duration(milliseconds: 400 + (index * 100)),
                         curve: Curves.easeOutQuad,
                         builder: (context, value, child) {
+                          // Clamp opacity to valid range
+                          final safeOpacity = value.clamp(0.0, 1.0);
                           return Transform.translate(
-                            offset: Offset(0, 20 * (1 - value)),
+                            offset: Offset(0, 20 * (1 - safeOpacity)),
                             child: Opacity(
-                              opacity: value,
+                              opacity: safeOpacity,
                               child: Padding(
                                 padding: const EdgeInsets.only(bottom: 12),
                                 child: CategoryBreakdownTile(

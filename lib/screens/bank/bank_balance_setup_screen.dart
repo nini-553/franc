@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../services/bank_call_rate_limiter.dart';
+import '../../services/balance_sms_parser.dart';
 
 class BankBalanceSetupScreen extends StatefulWidget {
   final VoidCallback onComplete;
@@ -19,14 +21,56 @@ class BankBalanceSetupScreen extends StatefulWidget {
   State<BankBalanceSetupScreen> createState() => _BankBalanceSetupScreenState();
 }
 
-class _BankBalanceSetupScreenState extends State<BankBalanceSetupScreen> {
+class _BankBalanceSetupScreenState extends State<BankBalanceSetupScreen>
+    with WidgetsBindingObserver {
   int? _selectedBankIndex;
   Map<String, int> _remainingCalls = {};
+  bool _hadBalanceOnEnter = false;
+  StreamSubscription<Map<String, dynamic>>? _balanceSubscription;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadRemainingCalls();
+    _checkInitialBalance();
+    _balanceSubscription = BalanceSmsParser.onBalanceUpdate.listen((_) {
+      if (mounted && !_hadBalanceOnEnter) {
+        Navigator.of(context).pop();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _balanceSubscription?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  Future<void> _checkInitialBalance() async {
+    final last = await BalanceSmsParser.getLastBalance();
+    if (mounted) {
+      setState(() => _hadBalanceOnEnter = last != null && last['balance'] != null);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    _onAppResumed();
+  }
+
+  Future<void> _onAppResumed() async {
+    // Brief delay so SMS detection (from notification listener) can finish
+    await Future.delayed(const Duration(milliseconds: 800));
+    if (!mounted) return;
+    final last = await BalanceSmsParser.getLastBalance();
+    final hasBalanceNow = last != null && last['balance'] != null;
+    if (hasBalanceNow && !_hadBalanceOnEnter && mounted) {
+      // Balance was just received - pop so BlockedHomeScreen's onReturnFromSetup refreshes to home
+      Navigator.of(context).pop();
+    }
   }
 
   Future<void> _loadRemainingCalls() async {

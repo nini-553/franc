@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
+import 'user_service.dart';
 
 /// Service to parse bank balance SMS messages
 class BalanceSmsParser {
@@ -178,12 +180,36 @@ class BalanceSmsParser {
     // Mark bank setup as completed
     await prefs.setBool('has_completed_bank_setup', true);
     
+    // Sync with backend (non-blocking)
+    _syncBalanceToBackend(bank, balance);
+    
     // Notify listeners about the new balance
     _balanceUpdateController.add({
       'bank': bank,
       'balance': balance,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     });
+  }
+
+  /// Sync balance to backend (PUT /user/balance) - non-blocking
+  static void _syncBalanceToBackend(String bank, double balance) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userEmail = prefs.getString('user_email');
+      if (userEmail == null) return;
+
+      // Sync to backend (fire and forget - don't block)
+      UserService.updateBalance(
+        email: userEmail,
+        balance: balance,
+        bank: bank,
+      ).catchError((e) {
+        debugPrint('Error syncing balance to backend: $e');
+      });
+    } catch (e) {
+      // Silently fail - balance is stored locally anyway
+      debugPrint('Error syncing balance to backend: $e');
+    }
   }
 
   /// Get stored balance
